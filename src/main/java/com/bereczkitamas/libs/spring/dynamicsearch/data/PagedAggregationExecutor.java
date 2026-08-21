@@ -11,6 +11,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
+import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.aggregation.FacetOperation;
 import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
@@ -31,9 +32,20 @@ public class PagedAggregationExecutor {
   private final MongoQueryBuilder queryBuilder;
   private final JoinResolver joinResolver;
   private final ProjectionBuilder projectionBuilder;
+  @Nullable private final AggregationOptions defaultAggregationOptions;
 
   public PagedAggregationExecutor(MongoTemplate mongoTemplate) {
-    this(mongoTemplate, new MongoQueryBuilder(), new JoinResolver(), new ProjectionBuilder());
+    this(mongoTemplate, new MongoQueryBuilder(), new JoinResolver(), new ProjectionBuilder(), null);
+  }
+
+  public PagedAggregationExecutor(
+      MongoTemplate mongoTemplate, @Nullable AggregationOptions defaultAggregationOptions) {
+    this(
+        mongoTemplate,
+        new MongoQueryBuilder(),
+        new JoinResolver(),
+        new ProjectionBuilder(),
+        defaultAggregationOptions);
   }
 
   public PagedAggregationExecutor(
@@ -42,7 +54,20 @@ public class PagedAggregationExecutor {
         mongoTemplate,
         new MongoQueryBuilder(new SearchCriteriaValidator(objectMapper)),
         new JoinResolver(),
-        new ProjectionBuilder());
+        new ProjectionBuilder(),
+        null);
+  }
+
+  public PagedAggregationExecutor(
+      MongoTemplate mongoTemplate,
+      com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+      @Nullable AggregationOptions defaultAggregationOptions) {
+    this(
+        mongoTemplate,
+        new MongoQueryBuilder(new SearchCriteriaValidator(objectMapper)),
+        new JoinResolver(),
+        new ProjectionBuilder(),
+        defaultAggregationOptions);
   }
 
   public PagedAggregationExecutor(
@@ -50,11 +75,21 @@ public class PagedAggregationExecutor {
       MongoQueryBuilder queryBuilder,
       JoinResolver joinResolver,
       ProjectionBuilder projectionBuilder) {
+    this(mongoTemplate, queryBuilder, joinResolver, projectionBuilder, null);
+  }
+
+  public PagedAggregationExecutor(
+      MongoTemplate mongoTemplate,
+      MongoQueryBuilder queryBuilder,
+      JoinResolver joinResolver,
+      ProjectionBuilder projectionBuilder,
+      @Nullable AggregationOptions defaultAggregationOptions) {
     this.mongoTemplate = mongoTemplate;
     this.queryBuilder = queryBuilder != null ? queryBuilder : new MongoQueryBuilder();
     this.joinResolver = joinResolver != null ? joinResolver : new JoinResolver();
     this.projectionBuilder =
         projectionBuilder != null ? projectionBuilder : new ProjectionBuilder();
+    this.defaultAggregationOptions = defaultAggregationOptions;
   }
 
   /**
@@ -67,7 +102,21 @@ public class PagedAggregationExecutor {
       Pageable pageable,
       Class<E> entityClass,
       Class<F> facetResultClass) {
-    Aggregation aggregation = buildSearchPipeline(request, registry, pageable);
+    return executeSearch(request, registry, pageable, null, entityClass, facetResultClass);
+  }
+
+  /**
+   * Builds a pipeline from a {@link SearchRequest} with custom {@link AggregationOptions} and
+   * executes it.
+   */
+  public <E, F extends PagedResult<E>> PagedSearchResponse<E> executeSearch(
+      SearchRequest request,
+      SearchFieldRegistry registry,
+      Pageable pageable,
+      @Nullable AggregationOptions options,
+      Class<E> entityClass,
+      Class<F> facetResultClass) {
+    Aggregation aggregation = buildSearchPipeline(request, registry, pageable, options);
     return runAggregation(aggregation, pageable, entityClass, facetResultClass);
   }
 
@@ -82,6 +131,19 @@ public class PagedAggregationExecutor {
       @Nullable Sort sort,
       Class<E> entityClass,
       Class<F> facetResultClass) {
+    return execute(criteria, pageable, sort, null, entityClass, facetResultClass);
+  }
+
+  /**
+   * Executes a simple match-based pipeline with custom {@link AggregationOptions}.
+   */
+  public <E, F extends PagedResult<E>> PagedSearchResponse<E> execute(
+      Criteria criteria,
+      Pageable pageable,
+      @Nullable Sort sort,
+      @Nullable AggregationOptions options,
+      Class<E> entityClass,
+      Class<F> facetResultClass) {
     List<AggregationOperation> ops = new ArrayList<>();
     ops.add(Aggregation.match(criteria));
     if (sort != null && sort.isSorted()) {
@@ -90,12 +152,22 @@ public class PagedAggregationExecutor {
     if (pageable.isPaged()) {
       ops.add(buildPaginationFacet(pageable));
     }
-    return runAggregation(Aggregation.newAggregation(ops), pageable, entityClass, facetResultClass);
+    Aggregation aggregation = applyOptions(Aggregation.newAggregation(ops), options);
+    return runAggregation(aggregation, pageable, entityClass, facetResultClass);
   }
 
   /** Builds the search pipeline without executing it (useful for logging/testing). */
   public Aggregation buildSearchPipeline(
       SearchRequest request, SearchFieldRegistry registry, Pageable pageable) {
+    return buildSearchPipeline(request, registry, pageable, null);
+  }
+
+  /** Builds the search pipeline with options without executing it (useful for logging/testing). */
+  public Aggregation buildSearchPipeline(
+      SearchRequest request,
+      SearchFieldRegistry registry,
+      Pageable pageable,
+      @Nullable AggregationOptions options) {
     List<AggregationOperation> ops = new ArrayList<>();
 
     // 1. Determine which joins are needed
@@ -153,7 +225,12 @@ public class PagedAggregationExecutor {
       ops.add(buildPaginationFacet(pageable));
     }
 
-    return Aggregation.newAggregation(ops);
+    return applyOptions(Aggregation.newAggregation(ops), options);
+  }
+
+  private Aggregation applyOptions(Aggregation aggregation, @Nullable AggregationOptions options) {
+    AggregationOptions effectiveOptions = options != null ? options : defaultAggregationOptions;
+    return effectiveOptions != null ? aggregation.withOptions(effectiveOptions) : aggregation;
   }
 
   private Sort resolveSort(Pageable pageable, SearchFieldRegistry registry) {

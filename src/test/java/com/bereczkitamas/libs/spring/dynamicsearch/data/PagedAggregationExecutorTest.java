@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 
@@ -610,6 +611,78 @@ class PagedAggregationExecutorTest {
       // Ensure no post-join match was added
       long matchCount = pipeline.stream().filter(doc -> doc.containsKey("$match")).count();
       assertEquals(1, matchCount);
+    }
+
+    @Test
+    void shouldApplyCustomAggregationOptions_whenProvidedPerRequest() {
+      // Given
+      SearchRequest request =
+          SearchRequest.builder()
+              .criteria(List.of(new SearchCriteria("name", SearchOperation.EQUALS, "Alice")))
+              .build();
+      Pageable pageable = PageRequest.of(0, 10);
+      AggregationOptions options =
+          AggregationOptions.builder()
+              .allowDiskUse(true)
+              .maxTime(java.time.Duration.ofSeconds(5))
+              .build();
+
+      // When
+      Aggregation aggregation =
+          executor.buildSearchPipeline(request, REGISTRY, pageable, options);
+
+      // Then
+      assertNotNull(aggregation);
+      assertTrue(aggregation.getOptions().isAllowDiskUse());
+      assertEquals(
+          java.time.Duration.ofSeconds(5), aggregation.getOptions().getMaxTime());
+    }
+
+    @Test
+    void shouldApplyDefaultAggregationOptions_whenConfiguredOnExecutor() {
+      // Given
+      AggregationOptions defaultOptions =
+          AggregationOptions.builder().allowDiskUse(true).build();
+      PagedAggregationExecutor customExecutor =
+          new PagedAggregationExecutor(mongoTemplate, defaultOptions);
+
+      SearchRequest request =
+          SearchRequest.builder()
+              .criteria(List.of(new SearchCriteria("name", SearchOperation.EQUALS, "Alice")))
+              .build();
+      Pageable pageable = PageRequest.of(0, 10);
+
+      // When
+      Aggregation aggregation = customExecutor.buildSearchPipeline(request, REGISTRY, pageable);
+
+      // Then
+      assertNotNull(aggregation);
+      assertTrue(aggregation.getOptions().isAllowDiskUse());
+    }
+
+    @Test
+    void shouldOverrideDefaultOptions_withPerRequestOptions() {
+      // Given
+      AggregationOptions defaultOptions =
+          AggregationOptions.builder().allowDiskUse(false).build();
+      PagedAggregationExecutor customExecutor =
+          new PagedAggregationExecutor(mongoTemplate, defaultOptions);
+
+      SearchRequest request =
+          SearchRequest.builder()
+              .criteria(List.of(new SearchCriteria("name", SearchOperation.EQUALS, "Alice")))
+              .build();
+      Pageable pageable = PageRequest.of(0, 10);
+      AggregationOptions perRequestOptions =
+          AggregationOptions.builder().allowDiskUse(true).build();
+
+      // When
+      Aggregation aggregation =
+          customExecutor.buildSearchPipeline(request, REGISTRY, pageable, perRequestOptions);
+
+      // Then
+      assertNotNull(aggregation);
+      assertTrue(aggregation.getOptions().isAllowDiskUse());
     }
   }
 

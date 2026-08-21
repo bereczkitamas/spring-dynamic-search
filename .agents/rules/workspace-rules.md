@@ -17,3 +17,6 @@ always_on: true
 
 ## 3. Spring Boot Library Packaging
 - In reusable library modules (non-application JARs), always configure `spring-boot-maven-plugin` with `<skip>true</skip>` (or omit repackaging execution) so that a consumable library artifact is published rather than an executable fat JAR.
+
+## 4. Task Completion Workflow
+- After finishing each task and verifying tests/build, always prompt the user to commit and push changes to git.
