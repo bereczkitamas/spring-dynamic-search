@@ -12,4 +12,18 @@ public interface SearchFieldRegistry {
     }
     return mapping;
   }
+
+  /**
+   * Creates a {@link SearchFieldRegistry} from a map of field mappings.
+   */
+  static SearchFieldRegistry of(Map<String, FieldMapping> mappings) {
+    return SimpleSearchFieldRegistry.of(mappings);
+  }
+
+  /**
+   * Creates a {@link SearchFieldRegistry} by scanning annotations on the given class.
+   */
+  static SearchFieldRegistry from(Class<?> clazz) {
+    return SimpleSearchFieldRegistry.from(clazz);
+  }
 }
