@@ -8,7 +8,7 @@
         <version>4.1.0</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>com.bereczkitamas.libs.spring.spring-dynamic-search</groupId>
+    <groupId>io.github.bereczkitamas</groupId>
     <artifactId>spring-dynamic-search</artifactId>
     <version>0.0.1</version>
     <name>spring-dynamic-search</name>
