@@ -18,16 +18,29 @@ public class MongoCriteriaBuilder {
       case LIKE -> Criteria.where(field).regex(".*" + Pattern.quote(value.toString()) + ".*", "i");
       case STARTS_WITH -> Criteria.where(field).regex("^" + Pattern.quote(value.toString()), "i");
       case ENDS_WITH -> Criteria.where(field).regex(Pattern.quote(value.toString()) + "$", "i");
-      case REGEX -> Criteria.where(field).regex(Pattern.quote(value.toString()), "i");
+      case REGEX -> Criteria.where(field).regex(value.toString(), "i");
       case GREATER_THAN -> Criteria.where(field).gt(value);
       case LESS_THAN -> Criteria.where(field).lt(value);
       case GREATER_THAN_OR_EQUAL -> Criteria.where(field).gte(value);
       case LESS_THAN_OR_EQUAL -> Criteria.where(field).lte(value);
-      case IN -> Criteria.where(field).in((Collection<?>) value);
-      case NOT_IN -> Criteria.where(field).nin((Collection<?>) value);
+      case IN -> Criteria.where(field).in(toCollection(value));
+      case NOT_IN -> Criteria.where(field).nin(toCollection(value));
       case IS_NULL -> Criteria.where(field).is(null);
       case IS_NOT_NULL -> Criteria.where(field).ne(null);
     };
+  }
+
+  private Collection<?> toCollection(Object value) {
+    if (value instanceof Collection<?> coll) {
+      return coll;
+    }
+    if (value instanceof Object[] arr) {
+      return List.of(arr);
+    }
+    if (value == null) {
+      return List.of();
+    }
+    return List.of(value);
   }
 
   /** Combines a flat list of criteria with AND/OR */

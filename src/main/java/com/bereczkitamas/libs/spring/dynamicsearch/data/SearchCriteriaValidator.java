@@ -3,12 +3,18 @@ package com.bereczkitamas.libs.spring.dynamicsearch.data;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Collection;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
 
-@RequiredArgsConstructor
 public class SearchCriteriaValidator {
 
-  private final ObjectMapper objectMapper = new ObjectMapper();
+  private final ObjectMapper objectMapper;
+
+  public SearchCriteriaValidator() {
+    this(new ObjectMapper().findAndRegisterModules());
+  }
+
+  public SearchCriteriaValidator(ObjectMapper objectMapper) {
+    this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper().findAndRegisterModules();
+  }
 
   public SearchCriteria validateAndTransform(
       SearchCriteria dtoCriteria, SearchFieldRegistry registry) {

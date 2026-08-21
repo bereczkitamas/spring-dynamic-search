@@ -2,14 +2,26 @@ package com.bereczkitamas.libs.spring.dynamicsearch.data;
 
 import java.util.ArrayList;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.query.Criteria;
 
-@RequiredArgsConstructor
 public class MongoQueryBuilder {
 
-  private final MongoCriteriaBuilder criteriaBuilder = new MongoCriteriaBuilder();
-  private final SearchCriteriaValidator validator = new SearchCriteriaValidator();
+  private final MongoCriteriaBuilder criteriaBuilder;
+  private final SearchCriteriaValidator validator;
+
+  public MongoQueryBuilder() {
+    this(new MongoCriteriaBuilder(), new SearchCriteriaValidator());
+  }
+
+  public MongoQueryBuilder(SearchCriteriaValidator validator) {
+    this(new MongoCriteriaBuilder(), validator);
+  }
+
+  public MongoQueryBuilder(
+      MongoCriteriaBuilder criteriaBuilder, SearchCriteriaValidator validator) {
+    this.criteriaBuilder = criteriaBuilder != null ? criteriaBuilder : new MongoCriteriaBuilder();
+    this.validator = validator != null ? validator : new SearchCriteriaValidator();
+  }
 
   public Criteria build(SearchRequest request, SearchFieldRegistry registry) {
     List<Criteria> criteriaList = new ArrayList<>();

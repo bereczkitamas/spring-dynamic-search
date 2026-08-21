@@ -25,13 +25,37 @@ import org.springframework.data.mongodb.core.query.Criteria;
  * branches (see {@link PagedResult}).
  */
 @Slf4j
-@RequiredArgsConstructor
 public class PagedAggregationExecutor {
 
   private final MongoTemplate mongoTemplate;
-  private final MongoQueryBuilder queryBuilder = new MongoQueryBuilder();
-  private final JoinResolver joinResolver = new JoinResolver();
-  private final ProjectionBuilder projectionBuilder = new ProjectionBuilder();
+  private final MongoQueryBuilder queryBuilder;
+  private final JoinResolver joinResolver;
+  private final ProjectionBuilder projectionBuilder;
+
+  public PagedAggregationExecutor(MongoTemplate mongoTemplate) {
+    this(mongoTemplate, new MongoQueryBuilder(), new JoinResolver(), new ProjectionBuilder());
+  }
+
+  public PagedAggregationExecutor(
+      MongoTemplate mongoTemplate, com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+    this(
+        mongoTemplate,
+        new MongoQueryBuilder(new SearchCriteriaValidator(objectMapper)),
+        new JoinResolver(),
+        new ProjectionBuilder());
+  }
+
+  public PagedAggregationExecutor(
+      MongoTemplate mongoTemplate,
+      MongoQueryBuilder queryBuilder,
+      JoinResolver joinResolver,
+      ProjectionBuilder projectionBuilder) {
+    this.mongoTemplate = mongoTemplate;
+    this.queryBuilder = queryBuilder != null ? queryBuilder : new MongoQueryBuilder();
+    this.joinResolver = joinResolver != null ? joinResolver : new JoinResolver();
+    this.projectionBuilder =
+        projectionBuilder != null ? projectionBuilder : new ProjectionBuilder();
+  }
 
   /**
    * Builds a pipeline from a {@link SearchRequest} (with joins resolved from the registry) and

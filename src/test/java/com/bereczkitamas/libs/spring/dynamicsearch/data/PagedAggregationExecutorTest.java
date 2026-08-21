@@ -80,7 +80,19 @@ class PagedAggregationExecutorTest {
                   "score",
                   Double.class,
                   SearchOperation.GREATER_THAN_OR_EQUAL,
-                  SearchOperation.LESS_THAN_OR_EQUAL));
+                  SearchOperation.LESS_THAN_OR_EQUAL),
+              "createdAt",
+              FieldMapping.of(
+                  "createdAt",
+                  java.time.Instant.class,
+                  SearchOperation.GREATER_THAN,
+                  SearchOperation.EQUALS),
+              "birthDate",
+              FieldMapping.of(
+                  "birthDate",
+                  java.time.LocalDate.class,
+                  SearchOperation.EQUALS,
+                  SearchOperation.LESS_THAN));
 
   /** Concrete facet result type for tests. */
   static class TestPagedResult extends PagedResult<TestEntity> {}
@@ -592,6 +604,37 @@ class PagedAggregationExecutorTest {
 
       assertEquals("country.name", result.getField());
     }
+
+    @Test
+    void shouldConvertIsoStringToInstant() {
+      SearchCriteria input =
+          new SearchCriteria("createdAt", SearchOperation.GREATER_THAN, "2026-08-21T20:00:00Z");
+      SearchCriteria result = validator.validateAndTransform(input, REGISTRY);
+
+      assertEquals(java.time.Instant.parse("2026-08-21T20:00:00Z"), result.getValue());
+    }
+
+    @Test
+    void shouldConvertIsoStringToLocalDate() {
+      SearchCriteria input =
+          new SearchCriteria("birthDate", SearchOperation.EQUALS, "1990-05-15");
+      SearchCriteria result = validator.validateAndTransform(input, REGISTRY);
+
+      assertEquals(java.time.LocalDate.of(1990, 5, 15), result.getValue());
+    }
+
+    @Test
+    void shouldSupportCustomObjectMapper() {
+      com.fasterxml.jackson.databind.ObjectMapper customMapper =
+          new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+      SearchCriteriaValidator customValidator = new SearchCriteriaValidator(customMapper);
+
+      SearchCriteria input =
+          new SearchCriteria("birthDate", SearchOperation.EQUALS, "2000-01-01");
+      SearchCriteria result = customValidator.validateAndTransform(input, REGISTRY);
+
+      assertEquals(java.time.LocalDate.of(2000, 1, 1), result.getValue());
+    }
   }
 
   // ============================
@@ -644,6 +687,18 @@ class PagedAggregationExecutorTest {
     }
 
     @Test
+    void shouldBuildRegex_withoutEscapingRegexSyntax() {
+      Criteria c =
+          builder.buildCriteria(
+              new SearchCriteria("email", SearchOperation.REGEX, "^user_[0-9]+@domain\\.com$"));
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      java.util.regex.Pattern pattern = (java.util.regex.Pattern) doc.get("email");
+      assertEquals("^user_[0-9]+@domain\\.com$", pattern.pattern());
+      assertTrue((pattern.flags() & java.util.regex.Pattern.CASE_INSENSITIVE) != 0);
+    }
+
+    @Test
     void shouldBuildGreaterThan() {
       Criteria c =
           builder.buildCriteria(new SearchCriteria("age", SearchOperation.GREATER_THAN, 18));
@@ -676,6 +731,20 @@ class PagedAggregationExecutorTest {
     void shouldBuildIn() {
       Criteria c =
           builder.buildCriteria(new SearchCriteria("age", SearchOperation.IN, List.of(20, 30, 40)));
+      assertNotNull(c);
+    }
+
+    @Test
+    void shouldBuildIn_withArrayValue() {
+      String[] array = new String[] {"A", "B"};
+      Criteria c = builder.buildCriteria(new SearchCriteria("name", SearchOperation.IN, array));
+      assertNotNull(c);
+    }
+
+    @Test
+    void shouldBuildNotIn_withSingleValue() {
+      Criteria c =
+          builder.buildCriteria(new SearchCriteria("name", SearchOperation.NOT_IN, "single"));
       assertNotNull(c);
     }
 
