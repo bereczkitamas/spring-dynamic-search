@@ -27,7 +27,45 @@ public class MongoCriteriaBuilder {
       case NOT_IN -> Criteria.where(field).nin(toCollection(value));
       case IS_NULL -> Criteria.where(field).is(null);
       case IS_NOT_NULL -> Criteria.where(field).ne(null);
+      case BETWEEN -> {
+        List<?> bounds = toList(value);
+        yield Criteria.where(field).gte(bounds.get(0)).lte(bounds.get(1));
+      }
+      case NOT_BETWEEN -> {
+        List<?> bounds = toList(value);
+        yield new Criteria()
+            .orOperator(Criteria.where(field).lt(bounds.get(0)), Criteria.where(field).gt(bounds.get(1)));
+      }
+      case EXISTS -> Criteria.where(field).exists(true);
+      case DOES_NOT_EXIST -> Criteria.where(field).exists(false);
+      case IS_EMPTY -> new Criteria()
+          .orOperator(
+              Criteria.where(field).is(null),
+              Criteria.where(field).is(List.of()),
+              Criteria.where(field).is(""));
+      case IS_NOT_EMPTY -> new Criteria()
+          .andOperator(
+              Criteria.where(field).ne(null),
+              Criteria.where(field).ne(List.of()),
+              Criteria.where(field).ne(""));
+      case CONTAINS_ALL -> Criteria.where(field).all(toCollection(value));
     };
+  }
+
+  private List<?> toList(Object value) {
+    if (value instanceof List<?> list) {
+      return list;
+    }
+    if (value instanceof Collection<?> coll) {
+      return List.copyOf(coll);
+    }
+    if (value instanceof Object[] arr) {
+      return List.of(arr);
+    }
+    if (value == null) {
+      return List.of();
+    }
+    return List.of(value);
   }
 
   private Collection<?> toCollection(Object value) {

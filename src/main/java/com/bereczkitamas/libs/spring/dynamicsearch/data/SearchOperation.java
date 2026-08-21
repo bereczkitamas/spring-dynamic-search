@@ -14,5 +14,12 @@ public enum SearchOperation {
   NOT_IN,
   IS_NULL,
   IS_NOT_NULL,
-  REGEX
+  REGEX,
+  BETWEEN,
+  NOT_BETWEEN,
+  EXISTS,
+  DOES_NOT_EXIST,
+  IS_EMPTY,
+  IS_NOT_EMPTY,
+  CONTAINS_ALL
 }

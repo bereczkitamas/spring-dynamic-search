@@ -51,7 +51,19 @@ class PagedAggregationExecutorTest {
                   SearchOperation.EQUALS,
                   SearchOperation.GREATER_THAN,
                   SearchOperation.LESS_THAN,
-                  SearchOperation.IN),
+                  SearchOperation.IN,
+                  SearchOperation.BETWEEN,
+                  SearchOperation.NOT_BETWEEN),
+              "tags",
+              FieldMapping.of(
+                  "tags",
+                  String.class,
+                  SearchOperation.CONTAINS_ALL,
+                  SearchOperation.IN,
+                  SearchOperation.IS_EMPTY,
+                  SearchOperation.IS_NOT_EMPTY,
+                  SearchOperation.EXISTS,
+                  SearchOperation.DOES_NOT_EXIST),
               "countryName",
               FieldMapping.joined(
                   "country.name",
@@ -68,7 +80,11 @@ class PagedAggregationExecutorTest {
                   SearchOperation.IN,
                   SearchOperation.NOT_IN,
                   SearchOperation.IS_NULL,
-                  SearchOperation.IS_NOT_NULL),
+                  SearchOperation.IS_NOT_NULL,
+                  SearchOperation.IS_EMPTY,
+                  SearchOperation.IS_NOT_EMPTY,
+                  SearchOperation.EXISTS,
+                  SearchOperation.DOES_NOT_EXIST),
               "email",
               FieldMapping.of(
                   "email",
@@ -87,13 +103,16 @@ class PagedAggregationExecutorTest {
                   "createdAt",
                   java.time.Instant.class,
                   SearchOperation.GREATER_THAN,
-                  SearchOperation.EQUALS),
+                  SearchOperation.EQUALS,
+                  SearchOperation.BETWEEN,
+                  SearchOperation.NOT_BETWEEN),
               "birthDate",
               FieldMapping.of(
                   "birthDate",
                   java.time.LocalDate.class,
                   SearchOperation.EQUALS,
-                  SearchOperation.LESS_THAN));
+                  SearchOperation.LESS_THAN,
+                  SearchOperation.BETWEEN));
 
   /** Concrete facet result type for tests. */
   static class TestPagedResult extends PagedResult<TestEntity> {}
@@ -810,6 +829,51 @@ class PagedAggregationExecutorTest {
     }
 
     @Test
+    void shouldConvertBetweenBoundsToTargetType() {
+      SearchCriteria input =
+          new SearchCriteria("age", SearchOperation.BETWEEN, List.of("18", "65"));
+      SearchCriteria result = validator.validateAndTransform(input, REGISTRY);
+
+      assertEquals(List.of(18, 65), result.getValue());
+    }
+
+    @Test
+    void shouldConvertBetweenDates() {
+      SearchCriteria input =
+          new SearchCriteria(
+              "birthDate", SearchOperation.BETWEEN, List.of("1990-01-01", "2000-12-31"));
+      SearchCriteria result = validator.validateAndTransform(input, REGISTRY);
+
+      assertEquals(
+          List.of(
+              java.time.LocalDate.of(1990, 1, 1),
+              java.time.LocalDate.of(2000, 12, 31)),
+          result.getValue());
+    }
+
+    @Test
+    void shouldThrow_whenBetweenHasFewerThanTwoElements() {
+      SearchCriteria input =
+          new SearchCriteria("age", SearchOperation.BETWEEN, List.of("18"));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> validator.validateAndTransform(input, REGISTRY));
+    }
+
+    @Test
+    void shouldConvertContainsAllCollection() {
+      SearchCriteria inputAll =
+          new SearchCriteria("tags", SearchOperation.CONTAINS_ALL, List.of("spring", "mongo"));
+      SearchCriteria resultAll = validator.validateAndTransform(inputAll, REGISTRY);
+      assertEquals(List.of("spring", "mongo"), resultAll.getValue());
+
+      SearchCriteria inputIn =
+          new SearchCriteria("tags", SearchOperation.IN, new String[] {"java", "kotlin"});
+      SearchCriteria resultIn = validator.validateAndTransform(inputIn, REGISTRY);
+      assertEquals(List.of("java", "kotlin"), resultIn.getValue());
+    }
+
+    @Test
     void shouldSupportCustomObjectMapper() {
       com.fasterxml.jackson.databind.ObjectMapper customMapper =
           new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
@@ -954,6 +1018,76 @@ class PagedAggregationExecutorTest {
       Criteria c =
           builder.buildCriteria(new SearchCriteria("status", SearchOperation.IS_NOT_NULL, null));
       assertNotNull(c);
+    }
+
+    @Test
+    void shouldBuildBetween() {
+      Criteria c =
+          builder.buildCriteria(new SearchCriteria("age", SearchOperation.BETWEEN, List.of(18, 65)));
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      org.bson.Document ageDoc = (org.bson.Document) doc.get("age");
+      assertEquals(18, ageDoc.get("$gte"));
+      assertEquals(65, ageDoc.get("$lte"));
+    }
+
+    @Test
+    void shouldBuildNotBetween() {
+      Criteria c =
+          builder.buildCriteria(
+              new SearchCriteria("age", SearchOperation.NOT_BETWEEN, List.of(18, 65)));
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      assertTrue(doc.containsKey("$or"));
+    }
+
+    @Test
+    void shouldBuildExists() {
+      Criteria c =
+          builder.buildCriteria(new SearchCriteria("status", SearchOperation.EXISTS, null));
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      org.bson.Document statusDoc = (org.bson.Document) doc.get("status");
+      assertEquals(true, statusDoc.get("$exists"));
+    }
+
+    @Test
+    void shouldBuildDoesNotExist() {
+      Criteria c =
+          builder.buildCriteria(new SearchCriteria("status", SearchOperation.DOES_NOT_EXIST, null));
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      org.bson.Document statusDoc = (org.bson.Document) doc.get("status");
+      assertEquals(false, statusDoc.get("$exists"));
+    }
+
+    @Test
+    void shouldBuildIsEmpty() {
+      Criteria c =
+          builder.buildCriteria(new SearchCriteria("tags", SearchOperation.IS_EMPTY, null));
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      assertTrue(doc.containsKey("$or"));
+    }
+
+    @Test
+    void shouldBuildIsNotEmpty() {
+      Criteria c =
+          builder.buildCriteria(new SearchCriteria("tags", SearchOperation.IS_NOT_EMPTY, null));
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      assertTrue(doc.containsKey("$and"));
+    }
+
+    @Test
+    void shouldBuildContainsAll() {
+      Criteria c =
+          builder.buildCriteria(
+              new SearchCriteria("tags", SearchOperation.CONTAINS_ALL, List.of("java", "spring")));
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      org.bson.Document tagsDoc = (org.bson.Document) doc.get("tags");
+      assertEquals(List.of("java", "spring"), tagsDoc.get("$all"));
     }
 
     @Test
