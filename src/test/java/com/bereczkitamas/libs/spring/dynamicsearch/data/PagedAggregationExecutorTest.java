@@ -498,6 +498,119 @@ class PagedAggregationExecutorTest {
       boolean hasLookup = pipeline.stream().anyMatch(doc -> doc.containsKey("$lookup"));
       assertTrue(hasLookup, "Pipeline should contain $lookup for sorted joined field");
     }
+
+    @Test
+    void shouldPlaceLocalCriteriaBeforeLookupAndJoinedCriteriaAfterLookup_whenRootOperatorIsAnd() {
+      // Given
+      SearchRequest request =
+          SearchRequest.builder()
+              .criteria(
+                  List.of(
+                      new SearchCriteria("name", SearchOperation.EQUALS, "Alice"),
+                      new SearchCriteria("countryName", SearchOperation.EQUALS, "Germany")))
+              .operator(SearchRequest.AND_OPERATOR)
+              .build();
+      Pageable pageable = PageRequest.of(0, 10);
+
+      // When
+      Aggregation aggregation = executor.buildSearchPipeline(request, REGISTRY, pageable);
+
+      // Then
+      assertNotNull(aggregation);
+      var pipeline = aggregation.toPipeline(Aggregation.DEFAULT_CONTEXT);
+
+      // Stage 0: Pre-Join $match (local field: name)
+      assertTrue(pipeline.get(0).containsKey("$match"));
+      org.bson.Document preMatch = (org.bson.Document) pipeline.get(0).get("$match");
+      assertEquals("Alice", preMatch.get("name"));
+
+      // Stage 1: $lookup
+      assertTrue(pipeline.get(1).containsKey("$lookup"));
+
+      // Stage 2: $unwind
+      assertTrue(pipeline.get(2).containsKey("$unwind"));
+
+      // Stage 3: Post-Join $match (joined field: country.name)
+      assertTrue(pipeline.get(3).containsKey("$match"));
+      org.bson.Document postMatch = (org.bson.Document) pipeline.get(3).get("$match");
+      assertEquals("Germany", postMatch.get("country.name"));
+
+      // Stage 4: $facet
+      assertTrue(pipeline.get(4).containsKey("$facet"));
+    }
+
+    @Test
+    void shouldPlaceAllCriteriaAfterLookup_whenRootOperatorIsOr() {
+      // Given
+      SearchRequest request =
+          SearchRequest.builder()
+              .criteria(
+                  List.of(
+                      new SearchCriteria("name", SearchOperation.EQUALS, "Alice"),
+                      new SearchCriteria("countryName", SearchOperation.EQUALS, "Germany")))
+              .operator(SearchRequest.OR_OPERATOR)
+              .build();
+      Pageable pageable = PageRequest.of(0, 10);
+
+      // When
+      Aggregation aggregation = executor.buildSearchPipeline(request, REGISTRY, pageable);
+
+      // Then
+      assertNotNull(aggregation);
+      var pipeline = aggregation.toPipeline(Aggregation.DEFAULT_CONTEXT);
+
+      // Stage 0: $lookup (no pre-join match because OR crosses joined fields)
+      assertTrue(pipeline.get(0).containsKey("$lookup"));
+
+      // Stage 1: $unwind
+      assertTrue(pipeline.get(1).containsKey("$unwind"));
+
+      // Stage 2: Combined Post-Join $match
+      assertTrue(pipeline.get(2).containsKey("$match"));
+      org.bson.Document matchStage = (org.bson.Document) pipeline.get(2).get("$match");
+      assertTrue(matchStage.containsKey("$or"));
+
+      // Stage 3: $facet
+      assertTrue(pipeline.get(3).containsKey("$facet"));
+    }
+
+    @Test
+    void shouldOmitPostJoinMatch_whenAllCriteriaAreLocalAndJoinOnlyForSort() {
+      // Given
+      SearchRequest request =
+          SearchRequest.builder()
+              .criteria(List.of(new SearchCriteria("name", SearchOperation.EQUALS, "Alice")))
+              .build();
+      Pageable pageable = PageRequest.of(0, 10, Sort.by("countryName"));
+
+      // When
+      Aggregation aggregation = executor.buildSearchPipeline(request, REGISTRY, pageable);
+
+      // Then
+      assertNotNull(aggregation);
+      var pipeline = aggregation.toPipeline(Aggregation.DEFAULT_CONTEXT);
+
+      // Stage 0: Pre-Join $match
+      assertTrue(pipeline.get(0).containsKey("$match"));
+      org.bson.Document preMatch = (org.bson.Document) pipeline.get(0).get("$match");
+      assertEquals("Alice", preMatch.get("name"));
+
+      // Stage 1: $lookup
+      assertTrue(pipeline.get(1).containsKey("$lookup"));
+
+      // Stage 2: $unwind
+      assertTrue(pipeline.get(2).containsKey("$unwind"));
+
+      // Stage 3: $sort
+      assertTrue(pipeline.get(3).containsKey("$sort"));
+
+      // Stage 4: $facet
+      assertTrue(pipeline.get(4).containsKey("$facet"));
+
+      // Ensure no post-join match was added
+      long matchCount = pipeline.stream().filter(doc -> doc.containsKey("$match")).count();
+      assertEquals(1, matchCount);
+    }
   }
 
   // ============================
@@ -858,6 +971,83 @@ class PagedAggregationExecutorTest {
       SearchRequest request = SearchRequest.builder().build();
       Criteria result = queryBuilder.build(request, REGISTRY);
       assertNotNull(result);
+    }
+
+    @Test
+    void shouldBuildPreJoinCriteria_forLocalCriteriaAndPurelyLocalGroups() {
+      SearchGroup localGroup = new SearchGroup();
+      localGroup.setOperator(SearchRequest.OR_OPERATOR);
+      localGroup.setCriteria(
+          List.of(
+              new SearchCriteria("name", SearchOperation.EQUALS, "Alice"),
+              new SearchCriteria("name", SearchOperation.EQUALS, "Bob")));
+
+      SearchRequest request =
+          SearchRequest.builder()
+              .criteria(
+                  List.of(
+                      new SearchCriteria("age", SearchOperation.GREATER_THAN, 18),
+                      new SearchCriteria("countryName", SearchOperation.EQUALS, "Germany")))
+              .groups(List.of(localGroup))
+              .operator(SearchRequest.AND_OPERATOR)
+              .build();
+
+      Criteria preJoin = queryBuilder.buildPreJoinCriteria(request, REGISTRY);
+      assertNotNull(preJoin);
+      org.bson.Document doc = preJoin.getCriteriaObject();
+      // Should contain $and with age and the localGroup (name Alice or Bob), but NOT country.name
+      assertNotNull(doc);
+      String json = doc.toJson();
+      assertTrue(json.contains("age"));
+      assertTrue(json.contains("Alice"));
+      assertTrue(!json.contains("country.name"));
+    }
+
+    @Test
+    void shouldBuildPostJoinCriteria_forJoinedCriteriaAndMixedGroups() {
+      SearchGroup mixedGroup = new SearchGroup();
+      mixedGroup.setOperator(SearchRequest.OR_OPERATOR);
+      mixedGroup.setCriteria(
+          List.of(
+              new SearchCriteria("name", SearchOperation.EQUALS, "Alice"),
+              new SearchCriteria("countryName", SearchOperation.EQUALS, "Germany")));
+
+      SearchRequest request =
+          SearchRequest.builder()
+              .criteria(
+                  List.of(
+                      new SearchCriteria("age", SearchOperation.GREATER_THAN, 18),
+                      new SearchCriteria("countryName", SearchOperation.EQUALS, "France")))
+              .groups(List.of(mixedGroup))
+              .operator(SearchRequest.AND_OPERATOR)
+              .build();
+
+      Criteria postJoin = queryBuilder.buildPostJoinCriteria(request, REGISTRY);
+      assertNotNull(postJoin);
+      org.bson.Document doc = postJoin.getCriteriaObject();
+      String json = doc.toJson();
+      // Should contain countryName (France) and mixed group, but NOT top-level age
+      assertTrue(json.contains("country.name"));
+      assertTrue(json.contains("France"));
+      assertTrue(json.contains("Alice")); // inside mixed group
+    }
+
+    @Test
+    void shouldReturnEmptyPreJoinCriteria_whenRootOperatorIsOr() {
+      SearchRequest request =
+          SearchRequest.builder()
+              .criteria(
+                  List.of(
+                      new SearchCriteria("name", SearchOperation.EQUALS, "Alice"),
+                      new SearchCriteria("countryName", SearchOperation.EQUALS, "Germany")))
+              .operator(SearchRequest.OR_OPERATOR)
+              .build();
+
+      Criteria preJoin = queryBuilder.buildPreJoinCriteria(request, REGISTRY);
+      assertTrue(preJoin.getCriteriaObject().isEmpty());
+
+      Criteria postJoin = queryBuilder.buildPostJoinCriteria(request, REGISTRY);
+      assertTrue(!postJoin.getCriteriaObject().isEmpty());
     }
   }
 

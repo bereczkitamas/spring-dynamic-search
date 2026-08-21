@@ -101,23 +101,39 @@ public class PagedAggregationExecutor {
     // 1. Determine which joins are needed
     Set<JoinDescriptor> joins = joinResolver.resolveJoins(request, pageable, registry);
 
-    // 2. Add $lookup + $unwind for each required join
-    for (JoinDescriptor join : joins) {
-      ops.add(
-          Aggregation.lookup(
-              join.getCollectionName(),
-              join.getLocalField(),
-              join.getForeignField(),
-              join.getAs()));
-      if (join.isSingleResult()) {
-        // preserveNullAndEmptyArrays = true -> LEFT JOIN behavior
-        ops.add(Aggregation.unwind(join.getAs(), true));
+    if (joins.isEmpty()) {
+      // Fast path: No joins needed. Single $match stage before sorting/projection/pagination.
+      Criteria criteria = queryBuilder.build(request, registry);
+      if (!criteria.getCriteriaObject().isEmpty()) {
+        ops.add(Aggregation.match(criteria));
+      }
+    } else {
+      // Pushdown path: Pre-Join $match (local criteria) -> $lookup + $unwind -> Post-Join $match
+      Criteria preJoinCriteria = queryBuilder.buildPreJoinCriteria(request, registry);
+      if (!preJoinCriteria.getCriteriaObject().isEmpty()) {
+        ops.add(Aggregation.match(preJoinCriteria));
+      }
+
+      // 2. Add $lookup + $unwind for each required join
+      for (JoinDescriptor join : joins) {
+        ops.add(
+            Aggregation.lookup(
+                join.getCollectionName(),
+                join.getLocalField(),
+                join.getForeignField(),
+                join.getAs()));
+        if (join.isSingleResult()) {
+          // preserveNullAndEmptyArrays = true -> LEFT JOIN behavior
+          ops.add(Aggregation.unwind(join.getAs(), true));
+        }
+      }
+
+      // 3. Post-Join $match with joined / remaining criteria
+      Criteria postJoinCriteria = queryBuilder.buildPostJoinCriteria(request, registry);
+      if (!postJoinCriteria.getCriteriaObject().isEmpty()) {
+        ops.add(Aggregation.match(postJoinCriteria));
       }
     }
-
-    // 3. $match with all criteria (now safe to reference joined fields)
-    Criteria criteria = queryBuilder.build(request, registry);
-    ops.add(Aggregation.match(criteria));
 
     // 4. Sort (translate DTO field -> document path)
     Sort resolvedSort = resolveSort(pageable, registry);
