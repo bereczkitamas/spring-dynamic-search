@@ -97,13 +97,16 @@ public class SearchSchemaService {
 
     for (FieldSchema field : schema.getFields()) {
       sb.append("- `").append(field.getName()).append("` (").append(field.getType()).append(")");
-      if (!field.getDescription().isBlank()) {
+      if (field.getDescription() != null && !field.getDescription().isBlank()) {
         sb.append(": ").append(field.getDescription());
       }
-      if (!field.getExamples().isEmpty()) {
+      if (field.getExamples() != null && !field.getExamples().isEmpty()) {
         sb.append(" | Examples: ").append(String.join(", ", field.getExamples()));
       }
-      sb.append("\n  - Allowed Operations: ").append(String.join(", ", field.getAllowedOperations())).append("\n");
+      if (field.getAllowedOperations() != null && !field.getAllowedOperations().isEmpty()) {
+        sb.append("\n  - Allowed Operations: ").append(String.join(", ", field.getAllowedOperations()));
+      }
+      sb.append("\n");
     }
 
     sb.append("\n#### SearchRequest JSON Structure:\n");

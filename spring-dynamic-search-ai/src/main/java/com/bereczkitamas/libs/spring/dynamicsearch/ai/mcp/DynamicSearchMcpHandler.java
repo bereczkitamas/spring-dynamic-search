@@ -121,10 +121,10 @@ public class DynamicSearchMcpHandler<T> {
     SearchRequest searchRequest =
         searchReqObj != null ? objectMapper.convertValue(searchReqObj, SearchRequest.class) : null;
 
-    int page = arguments.containsKey("page") ? ((Number) arguments.get("page")).intValue() : 0;
-    int size = arguments.containsKey("size") ? ((Number) arguments.get("size")).intValue() : 20;
-    String sortField = (String) arguments.get("sortField");
-    String sortDirection = (String) arguments.getOrDefault("sortDirection", "ASC");
+    int page = parseInteger(arguments.get("page"), 0);
+    int size = parseInteger(arguments.get("size"), 20);
+    String sortField = arguments.get("sortField") != null ? String.valueOf(arguments.get("sortField")) : null;
+    String sortDirection = arguments.get("sortDirection") != null ? String.valueOf(arguments.get("sortDirection")) : "ASC";
 
     return SearchToolRequest.builder()
         .searchRequest(searchRequest)
@@ -133,6 +133,19 @@ public class DynamicSearchMcpHandler<T> {
         .sortField(sortField)
         .sortDirection(sortDirection)
         .build();
+  }
+
+  private int parseInteger(Object value, int defaultValue) {
+    if (value instanceof Number num) {
+      return num.intValue();
+    }
+    if (value instanceof String str && !str.isBlank()) {
+      try {
+        return Integer.parseInt(str.trim());
+      } catch (NumberFormatException ignored) {
+      }
+    }
+    return defaultValue;
   }
 
   private String toJson(Object object) {
