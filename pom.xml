@@ -10,7 +10,7 @@
     </parent>
     <groupId>io.github.bereczkitamas</groupId>
     <artifactId>spring-dynamic-search</artifactId>
-    <version>0.0.1</version>
+    <version>0.1.0</version>
     <name>spring-dynamic-search</name>
     <description>Dynamic querying, filtering, and aggregation library for Spring Data MongoDB</description>
     <url>https://github.com/bereczkitamas/spring-dynamic-search</url>

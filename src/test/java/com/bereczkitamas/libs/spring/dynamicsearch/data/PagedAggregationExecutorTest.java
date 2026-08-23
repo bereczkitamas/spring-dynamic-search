@@ -114,9 +114,6 @@ class PagedAggregationExecutorTest {
                   SearchOperation.LESS_THAN,
                   SearchOperation.BETWEEN));
 
-  /** Concrete facet result type for tests. */
-  static class TestPagedResult extends PagedResult<TestEntity> {}
-
   record TestEntity(String name, int age) {}
 
   @BeforeEach
@@ -140,16 +137,10 @@ class PagedAggregationExecutorTest {
               .build();
       Pageable pageable = PageRequest.of(0, 10);
 
-      TestPagedResult facetResult = new TestPagedResult();
-      facetResult.setData(List.of(new TestEntity("Alice", 30)));
-      facetResult.setTotalCount(List.of(new CountResult(1)));
-
-      mockAggregation(facetResult);
+      mockAggregation(List.of(new TestEntity("Alice", 30)), 1);
 
       // When
-      var response =
-          executor.executeSearch(
-              request, REGISTRY, pageable, TestEntity.class, TestPagedResult.class);
+      var response = executor.executeSearch(request, REGISTRY, pageable, TestEntity.class);
 
       // Then
       assertEquals(1, response.total());
@@ -169,9 +160,7 @@ class PagedAggregationExecutorTest {
       mockNullAggregation();
 
       // When
-      var response =
-          executor.executeSearch(
-              request, REGISTRY, pageable, TestEntity.class, TestPagedResult.class);
+      var response = executor.executeSearch(request, REGISTRY, pageable, TestEntity.class);
 
       // Then
       assertEquals(0, response.total());
@@ -187,16 +176,10 @@ class PagedAggregationExecutorTest {
               .build();
       Pageable pageable = PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "age"));
 
-      TestPagedResult facetResult = new TestPagedResult();
-      facetResult.setData(List.of(new TestEntity("Bob", 25)));
-      facetResult.setTotalCount(List.of(new CountResult(1)));
-
-      mockAggregation(facetResult);
+      mockAggregation(List.of(new TestEntity("Bob", 25)), 1);
 
       // When
-      var response =
-          executor.executeSearch(
-              request, REGISTRY, pageable, TestEntity.class, TestPagedResult.class);
+      var response = executor.executeSearch(request, REGISTRY, pageable, TestEntity.class);
 
       // Then
       assertEquals(1, response.total());
@@ -212,16 +195,10 @@ class PagedAggregationExecutorTest {
               .build();
       Pageable pageable = PageRequest.of(0, 10);
 
-      TestPagedResult facetResult = new TestPagedResult();
-      facetResult.setData(List.of(new TestEntity("Hans", 40)));
-      facetResult.setTotalCount(List.of(new CountResult(1)));
-
-      mockAggregation(facetResult);
+      mockAggregation(List.of(new TestEntity("Hans", 40)), 1);
 
       // When
-      var response =
-          executor.executeSearch(
-              request, REGISTRY, pageable, TestEntity.class, TestPagedResult.class);
+      var response = executor.executeSearch(request, REGISTRY, pageable, TestEntity.class);
 
       // Then
       assertEquals(1, response.total());
@@ -236,16 +213,10 @@ class PagedAggregationExecutorTest {
               .build();
       Pageable pageable = PageRequest.of(0, 10, Sort.by("countryName"));
 
-      TestPagedResult facetResult = new TestPagedResult();
-      facetResult.setData(List.of(new TestEntity("Alice", 30)));
-      facetResult.setTotalCount(List.of(new CountResult(1)));
-
-      mockAggregation(facetResult);
+      mockAggregation(List.of(new TestEntity("Alice", 30)), 1);
 
       // When
-      var response =
-          executor.executeSearch(
-              request, REGISTRY, pageable, TestEntity.class, TestPagedResult.class);
+      var response = executor.executeSearch(request, REGISTRY, pageable, TestEntity.class);
 
       // Then
       assertEquals(1, response.total());
@@ -264,16 +235,10 @@ class PagedAggregationExecutorTest {
               .build();
       Pageable pageable = PageRequest.of(0, 10);
 
-      TestPagedResult facetResult = new TestPagedResult();
-      facetResult.setData(List.of(new TestEntity("Alice", 30), new TestEntity("Bob", 25)));
-      facetResult.setTotalCount(List.of(new CountResult(2)));
-
-      mockAggregation(facetResult);
+      mockAggregation(List.of(new TestEntity("Alice", 30), new TestEntity("Bob", 25)), 2);
 
       // When
-      var response =
-          executor.executeSearch(
-              request, REGISTRY, pageable, TestEntity.class, TestPagedResult.class);
+      var response = executor.executeSearch(request, REGISTRY, pageable, TestEntity.class);
 
       // Then
       assertEquals(2, response.total());
@@ -297,16 +262,10 @@ class PagedAggregationExecutorTest {
               .build();
       Pageable pageable = PageRequest.of(0, 10);
 
-      TestPagedResult facetResult = new TestPagedResult();
-      facetResult.setData(List.of(new TestEntity("Alice", 30)));
-      facetResult.setTotalCount(List.of(new CountResult(1)));
-
-      mockAggregation(facetResult);
+      mockAggregation(List.of(new TestEntity("Alice", 30)), 1);
 
       // When
-      var response =
-          executor.executeSearch(
-              request, REGISTRY, pageable, TestEntity.class, TestPagedResult.class);
+      var response = executor.executeSearch(request, REGISTRY, pageable, TestEntity.class);
 
       // Then
       assertEquals(1, response.total());
@@ -335,9 +294,7 @@ class PagedAggregationExecutorTest {
       mockUnpagedAggregation(allEntities);
 
       // When
-      var response =
-          executor.executeSearch(
-              request, REGISTRY, pageable, TestEntity.class, TestPagedResult.class);
+      var response = executor.executeSearch(request, REGISTRY, pageable, TestEntity.class);
 
       // Then
       assertEquals(2, response.total());
@@ -359,15 +316,10 @@ class PagedAggregationExecutorTest {
       Sort sort = Sort.by(Sort.Direction.ASC, "age");
       Pageable pageable = PageRequest.of(0, 10);
 
-      TestPagedResult facetResult = new TestPagedResult();
-      facetResult.setData(List.of(new TestEntity("Alice", 30)));
-      facetResult.setTotalCount(List.of(new CountResult(1)));
-
-      mockAggregation(facetResult);
+      mockAggregation(List.of(new TestEntity("Alice", 30)), 1);
 
       // When
-      var response =
-          executor.execute(criteria, pageable, sort, TestEntity.class, TestPagedResult.class);
+      var response = executor.execute(criteria, pageable, sort, TestEntity.class);
 
       // Then
       assertEquals(1, response.total());
@@ -380,15 +332,10 @@ class PagedAggregationExecutorTest {
       Criteria criteria = Criteria.where("name").is("Alice");
       Pageable pageable = PageRequest.of(0, 10);
 
-      TestPagedResult facetResult = new TestPagedResult();
-      facetResult.setData(List.of(new TestEntity("Alice", 30)));
-      facetResult.setTotalCount(List.of(new CountResult(1)));
-
-      mockAggregation(facetResult);
+      mockAggregation(List.of(new TestEntity("Alice", 30)), 1);
 
       // When
-      var response =
-          executor.execute(criteria, pageable, null, TestEntity.class, TestPagedResult.class);
+      var response = executor.execute(criteria, pageable, null, TestEntity.class);
 
       // Then
       assertEquals(1, response.total());
@@ -401,15 +348,10 @@ class PagedAggregationExecutorTest {
       Sort sort = Sort.unsorted();
       Pageable pageable = PageRequest.of(0, 5);
 
-      TestPagedResult facetResult = new TestPagedResult();
-      facetResult.setData(List.of(new TestEntity("Bob", 25)));
-      facetResult.setTotalCount(List.of(new CountResult(1)));
-
-      mockAggregation(facetResult);
+      mockAggregation(List.of(new TestEntity("Bob", 25)), 1);
 
       // When
-      var response =
-          executor.execute(criteria, pageable, sort, TestEntity.class, TestPagedResult.class);
+      var response = executor.execute(criteria, pageable, sort, TestEntity.class);
 
       // Then
       assertEquals(1, response.total());
@@ -427,8 +369,7 @@ class PagedAggregationExecutorTest {
       mockUnpagedAggregation(allEntities);
 
       // When
-      var response =
-          executor.execute(criteria, pageable, null, TestEntity.class, TestPagedResult.class);
+      var response = executor.execute(criteria, pageable, null, TestEntity.class);
 
       // Then
       assertEquals(2, response.total());
@@ -1364,49 +1305,38 @@ class PagedAggregationExecutorTest {
   }
 
   // ============================
-  // PagedResult
-  // ============================
-
-  @Nested
-  class PagedResultTests {
-
-    @Test
-    void shouldReturnZero_whenTotalCountIsEmpty() {
-      PagedResult<String> result = new PagedResult<>();
-      assertEquals(0, result.getTotal());
-    }
-
-    @Test
-    void shouldReturnTotal_fromFirstCountResult() {
-      PagedResult<String> result = new PagedResult<>();
-      result.setTotalCount(List.of(new CountResult(42)));
-      assertEquals(42, result.getTotal());
-    }
-  }
-
-  // ============================
   // Helper methods
   // ============================
 
   @SuppressWarnings("unchecked")
-  private void mockAggregation(TestPagedResult facetResult) {
+  private void mockAggregation(List<TestEntity> entities, long totalCount) {
     when(mongoTemplate.getCollectionName(TestEntity.class)).thenReturn("testEntities");
-    AggregationResults<TestPagedResult> aggResults =
-        (AggregationResults<TestPagedResult>) org.mockito.Mockito.mock(AggregationResults.class);
-    when(aggResults.getUniqueMappedResult()).thenReturn(facetResult);
+    List<org.bson.Document> dataDocs =
+        entities.stream()
+            .map(e -> new org.bson.Document("name", e.name()).append("age", e.age()))
+            .toList();
+    List<org.bson.Document> totalDocs =
+        totalCount > 0 ? List.of(new org.bson.Document("total", totalCount)) : List.of();
+    org.bson.Document facetDoc =
+        new org.bson.Document(PagedAggregationExecutor.FIELD_DATA, dataDocs)
+            .append(PagedAggregationExecutor.FIELD_TOTAL_COUNT, totalDocs);
+
+    AggregationResults<org.bson.Document> aggResults =
+        (AggregationResults<org.bson.Document>) org.mockito.Mockito.mock(AggregationResults.class);
+    when(aggResults.getUniqueMappedResult()).thenReturn(facetDoc);
     when(mongoTemplate.aggregate(
-            any(Aggregation.class), eq("testEntities"), eq(TestPagedResult.class)))
+            any(Aggregation.class), eq("testEntities"), eq(org.bson.Document.class)))
         .thenReturn(aggResults);
   }
 
   @SuppressWarnings("unchecked")
   private void mockNullAggregation() {
     when(mongoTemplate.getCollectionName(TestEntity.class)).thenReturn("testEntities");
-    AggregationResults<TestPagedResult> aggResults =
-        (AggregationResults<TestPagedResult>) org.mockito.Mockito.mock(AggregationResults.class);
+    AggregationResults<org.bson.Document> aggResults =
+        (AggregationResults<org.bson.Document>) org.mockito.Mockito.mock(AggregationResults.class);
     when(aggResults.getUniqueMappedResult()).thenReturn(null);
     when(mongoTemplate.aggregate(
-            any(Aggregation.class), eq("testEntities"), eq(TestPagedResult.class)))
+            any(Aggregation.class), eq("testEntities"), eq(org.bson.Document.class)))
         .thenReturn(aggResults);
   }
 

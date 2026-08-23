@@ -1,11 +1,12 @@
 package com.bereczkitamas.libs.spring.dynamicsearch.data;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.Document;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -15,27 +16,31 @@ import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.aggregation.FacetOperation;
 import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
+import org.springframework.data.mongodb.core.convert.MongoConverter;
 import org.springframework.data.mongodb.core.query.Criteria;
 
 /**
  * Builds and executes paginated MongoDB aggregation pipelines.
  *
- * <p>Combines the pipeline-building logic (with optional joins and DTO->document sort field
- * translation via a {@link SearchFieldRegistry}) and the aggregation execution + result unwrapping.
- * All pipelines terminate with a {@code $facet} stage producing {@code data} and {@code totalCount}
- * branches (see {@link PagedResult}).
+ * <p>Combines pipeline-building logic (with optional joins, pre/post-join filtering pushdown,
+ * and DTO->document sort field translation via a {@link SearchFieldRegistry}) and aggregation
+ * execution directly returning typed {@link PagedSearchResponse}.
  */
 @Slf4j
 public class PagedAggregationExecutor {
+
+  public static final String FIELD_DATA = "data";
+  public static final String FIELD_TOTAL_COUNT = "totalCount";
 
   private final MongoTemplate mongoTemplate;
   private final MongoQueryBuilder queryBuilder;
   private final JoinResolver joinResolver;
   private final ProjectionBuilder projectionBuilder;
+  private final ObjectMapper objectMapper;
   @Nullable private final AggregationOptions defaultAggregationOptions;
 
   public PagedAggregationExecutor(MongoTemplate mongoTemplate) {
-    this(mongoTemplate, new MongoQueryBuilder(), new JoinResolver(), new ProjectionBuilder(), null);
+    this(mongoTemplate, new MongoQueryBuilder(), new JoinResolver(), new ProjectionBuilder(), null, null);
   }
 
   public PagedAggregationExecutor(
@@ -45,28 +50,31 @@ public class PagedAggregationExecutor {
         new MongoQueryBuilder(),
         new JoinResolver(),
         new ProjectionBuilder(),
+        null,
         defaultAggregationOptions);
   }
 
   public PagedAggregationExecutor(
-      MongoTemplate mongoTemplate, com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+      MongoTemplate mongoTemplate, ObjectMapper objectMapper) {
     this(
         mongoTemplate,
         new MongoQueryBuilder(new SearchCriteriaValidator(objectMapper)),
         new JoinResolver(),
         new ProjectionBuilder(),
+        objectMapper,
         null);
   }
 
   public PagedAggregationExecutor(
       MongoTemplate mongoTemplate,
-      com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+      ObjectMapper objectMapper,
       @Nullable AggregationOptions defaultAggregationOptions) {
     this(
         mongoTemplate,
         new MongoQueryBuilder(new SearchCriteriaValidator(objectMapper)),
         new JoinResolver(),
         new ProjectionBuilder(),
+        objectMapper,
         defaultAggregationOptions);
   }
 
@@ -75,7 +83,7 @@ public class PagedAggregationExecutor {
       MongoQueryBuilder queryBuilder,
       JoinResolver joinResolver,
       ProjectionBuilder projectionBuilder) {
-    this(mongoTemplate, queryBuilder, joinResolver, projectionBuilder, null);
+    this(mongoTemplate, queryBuilder, joinResolver, projectionBuilder, null, null);
   }
 
   public PagedAggregationExecutor(
@@ -84,66 +92,71 @@ public class PagedAggregationExecutor {
       JoinResolver joinResolver,
       ProjectionBuilder projectionBuilder,
       @Nullable AggregationOptions defaultAggregationOptions) {
+    this(mongoTemplate, queryBuilder, joinResolver, projectionBuilder, null, defaultAggregationOptions);
+  }
+
+  public PagedAggregationExecutor(
+      MongoTemplate mongoTemplate,
+      MongoQueryBuilder queryBuilder,
+      JoinResolver joinResolver,
+      ProjectionBuilder projectionBuilder,
+      @Nullable ObjectMapper objectMapper,
+      @Nullable AggregationOptions defaultAggregationOptions) {
     this.mongoTemplate = mongoTemplate;
     this.queryBuilder = queryBuilder != null ? queryBuilder : new MongoQueryBuilder();
     this.joinResolver = joinResolver != null ? joinResolver : new JoinResolver();
-    this.projectionBuilder =
-        projectionBuilder != null ? projectionBuilder : new ProjectionBuilder();
+    this.projectionBuilder = projectionBuilder != null ? projectionBuilder : new ProjectionBuilder();
+    this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper().findAndRegisterModules();
     this.defaultAggregationOptions = defaultAggregationOptions;
   }
 
   /**
-   * Builds a pipeline from a {@link SearchRequest} (with joins resolved from the registry) and
-   * executes it.
+   * Builds and executes a search pipeline from a {@link SearchRequest}, returning results converted
+   * directly to {@code entityClass}.
    */
-  public <E, F extends PagedResult<E>> PagedSearchResponse<E> executeSearch(
+  public <E> PagedSearchResponse<E> executeSearch(
       SearchRequest request,
       SearchFieldRegistry registry,
       Pageable pageable,
-      Class<E> entityClass,
-      Class<F> facetResultClass) {
-    return executeSearch(request, registry, pageable, null, entityClass, facetResultClass);
+      Class<E> entityClass) {
+    return executeSearch(request, registry, pageable, (AggregationOptions) null, entityClass);
   }
 
   /**
-   * Builds a pipeline from a {@link SearchRequest} with custom {@link AggregationOptions} and
-   * executes it.
+   * Builds and executes a search pipeline from a {@link SearchRequest} with custom {@link AggregationOptions},
+   * returning results converted directly to {@code entityClass}.
    */
-  public <E, F extends PagedResult<E>> PagedSearchResponse<E> executeSearch(
+  public <E> PagedSearchResponse<E> executeSearch(
       SearchRequest request,
       SearchFieldRegistry registry,
       Pageable pageable,
       @Nullable AggregationOptions options,
-      Class<E> entityClass,
-      Class<F> facetResultClass) {
+      Class<E> entityClass) {
     Aggregation aggregation = buildSearchPipeline(request, registry, pageable, options);
-    return runAggregation(aggregation, pageable, entityClass, facetResultClass);
+    return runAggregation(aggregation, pageable, entityClass);
   }
 
   /**
-   * Executes a simple match-based pipeline: {@code $match -> [$sort] -> [$facet | passthrough]}.
-   * Use this when no joins are required and the {@link Criteria} + {@link Sort} are already
-   * resolved to document fields.
+   * Executes a simple match-based pipeline, converting results directly to {@code entityClass}.
    */
-  public <E, F extends PagedResult<E>> PagedSearchResponse<E> execute(
+  public <E> PagedSearchResponse<E> execute(
       Criteria criteria,
       Pageable pageable,
       @Nullable Sort sort,
-      Class<E> entityClass,
-      Class<F> facetResultClass) {
-    return execute(criteria, pageable, sort, null, entityClass, facetResultClass);
+      Class<E> entityClass) {
+    return execute(criteria, pageable, sort, (AggregationOptions) null, entityClass);
   }
 
   /**
-   * Executes a simple match-based pipeline with custom {@link AggregationOptions}.
+   * Executes a simple match-based pipeline with custom {@link AggregationOptions},
+   * converting results directly to {@code entityClass}.
    */
-  public <E, F extends PagedResult<E>> PagedSearchResponse<E> execute(
+  public <E> PagedSearchResponse<E> execute(
       Criteria criteria,
       Pageable pageable,
       @Nullable Sort sort,
       @Nullable AggregationOptions options,
-      Class<E> entityClass,
-      Class<F> facetResultClass) {
+      Class<E> entityClass) {
     List<AggregationOperation> ops = new ArrayList<>();
     ops.add(Aggregation.match(criteria));
     if (sort != null && sort.isSorted()) {
@@ -153,7 +166,7 @@ public class PagedAggregationExecutor {
       ops.add(buildPaginationFacet(pageable));
     }
     Aggregation aggregation = applyOptions(Aggregation.newAggregation(ops), options);
-    return runAggregation(aggregation, pageable, entityClass, facetResultClass);
+    return runAggregation(aggregation, pageable, entityClass);
   }
 
   /** Builds the search pipeline without executing it (useful for logging/testing). */
@@ -162,7 +175,7 @@ public class PagedAggregationExecutor {
     return buildSearchPipeline(request, registry, pageable, null);
   }
 
-  /** Builds the search pipeline with options without executing it (useful for logging/testing). */
+  /** Builds the search pipeline without executing it (useful for logging/testing). */
   public Aggregation buildSearchPipeline(
       SearchRequest request,
       SearchFieldRegistry registry,
@@ -173,53 +186,45 @@ public class PagedAggregationExecutor {
     // 1. Determine which joins are needed
     Set<JoinDescriptor> joins = joinResolver.resolveJoins(request, pageable, registry);
 
-    if (joins.isEmpty()) {
-      // Fast path: No joins needed. Single $match stage before sorting/projection/pagination.
-      Criteria criteria = queryBuilder.build(request, registry);
-      if (!criteria.getCriteriaObject().isEmpty()) {
-        ops.add(Aggregation.match(criteria));
-      }
-    } else {
-      // Pushdown path: Pre-Join $match (local criteria) -> $lookup + $unwind -> Post-Join $match
-      Criteria preJoinCriteria = queryBuilder.buildPreJoinCriteria(request, registry);
-      if (!preJoinCriteria.getCriteriaObject().isEmpty()) {
-        ops.add(Aggregation.match(preJoinCriteria));
-      }
+    // 2. Pre-Join $match with local criteria (can use indexes on primary collection)
+    Criteria preJoinCriteria = queryBuilder.buildPreJoinCriteria(request, registry);
+    if (!preJoinCriteria.getCriteriaObject().isEmpty()) {
+      ops.add(Aggregation.match(preJoinCriteria));
+    }
 
-      // 2. Add $lookup + $unwind for each required join
-      for (JoinDescriptor join : joins) {
-        ops.add(
-            Aggregation.lookup(
-                join.getCollectionName(),
-                join.getLocalField(),
-                join.getForeignField(),
-                join.getAs()));
-        if (join.isSingleResult()) {
-          // preserveNullAndEmptyArrays = true -> LEFT JOIN behavior
-          ops.add(Aggregation.unwind(join.getAs(), true));
-        }
-      }
-
-      // 3. Post-Join $match with joined / remaining criteria
-      Criteria postJoinCriteria = queryBuilder.buildPostJoinCriteria(request, registry);
-      if (!postJoinCriteria.getCriteriaObject().isEmpty()) {
-        ops.add(Aggregation.match(postJoinCriteria));
+    // 3. $lookup + $unwind for each join
+    for (JoinDescriptor join : joins) {
+      ops.add(
+          Aggregation.lookup(
+              join.getCollectionName(),
+              join.getLocalField(),
+              join.getForeignField(),
+              join.getAs()));
+      if (join.isSingleResult()) {
+        // preserveNullAndEmptyArrays = true -> LEFT JOIN behavior
+        ops.add(Aggregation.unwind(join.getAs(), true));
       }
     }
 
-    // 4. Sort (translate DTO field -> document path)
+    // 4. Post-Join $match with joined / remaining criteria
+    Criteria postJoinCriteria = queryBuilder.buildPostJoinCriteria(request, registry);
+    if (!postJoinCriteria.getCriteriaObject().isEmpty()) {
+      ops.add(Aggregation.match(postJoinCriteria));
+    }
+
+    // 5. Sort (translate DTO field -> document path)
     Sort resolvedSort = resolveSort(pageable, registry);
     if (resolvedSort.isSorted()) {
       ops.add(Aggregation.sort(resolvedSort));
     }
 
-    // 5. Project (before facet to reduce memory)
+    // 6. Project (before facet to reduce memory)
     ProjectionResult projection = projectionBuilder.build(request.getProjection(), registry);
     if (projection.isApplicable()) {
       ops.add(buildProjectionStage(projection));
     }
 
-    // 6. $facet for pagination + count — only when paged. Unpaged callers stream the full
+    // 7. $facet for pagination + count — only when paged. Unpaged callers stream the full
     // result via the entity class directly (see run()), avoiding $facet's 100MB per-branch cap.
     if (pageable.isPaged()) {
       ops.add(buildPaginationFacet(pageable));
@@ -263,37 +268,47 @@ public class PagedAggregationExecutor {
   private FacetOperation buildPaginationFacet(Pageable pageable) {
     return Aggregation.facet(
             Aggregation.skip(pageable.getOffset()), Aggregation.limit(pageable.getPageSize()))
-        .as(PagedResult.FIELD_DATA)
+        .as(FIELD_DATA)
         .and(Aggregation.count().as("total"))
-        .as(PagedResult.FIELD_TOTAL_COUNT);
+        .as(FIELD_TOTAL_COUNT);
   }
 
-  private <E, F extends PagedResult<E>> PagedSearchResponse<E> runAggregation(
-      Aggregation aggregation, Pageable pageable, Class<E> entityClass, Class<F> facetResultClass) {
+  private <E> PagedSearchResponse<E> runAggregation(
+      Aggregation aggregation, Pageable pageable, Class<E> entityClass) {
     String collection = mongoTemplate.getCollectionName(entityClass);
 
     if (pageable.isPaged()) {
       if (log.isDebugEnabled()) {
         log.debug(
-            "Executing {} aggregation on [{}]. Pipeline: {}",
-            pageable.isPaged() ? "paged" : "unpaged",
+            "Executing paged aggregation on [{}]. Pipeline: {}",
             collection,
             aggregation.toPipeline(Aggregation.DEFAULT_CONTEXT));
       }
 
-      AggregationResults<F> results =
-          mongoTemplate.aggregate(aggregation, collection, facetResultClass);
-      F result = results.getUniqueMappedResult();
+      AggregationResults<Document> results =
+          mongoTemplate.aggregate(aggregation, collection, Document.class);
+      Document result = results.getUniqueMappedResult();
       if (result == null) {
         return new PagedSearchResponse<>(List.of(), 0);
       }
-      return new PagedSearchResponse<>(result.getData(), result.getTotal());
+
+      List<Document> rawTotal = result.getList(FIELD_TOTAL_COUNT, Document.class, List.of());
+      long total = rawTotal.isEmpty() ? 0 : ((Number) rawTotal.getFirst().get("total")).longValue();
+
+      List<Document> rawData = result.getList(FIELD_DATA, Document.class, List.of());
+      MongoConverter converter = mongoTemplate.getConverter();
+
+      List<E> data =
+          rawData.stream()
+              .map(doc -> converter != null ? converter.read(entityClass, doc) : objectMapper.convertValue(doc, entityClass))
+              .toList();
+
+      return new PagedSearchResponse<>(data, total);
     }
 
     if (log.isDebugEnabled()) {
       log.debug(
-          "Executing {} aggregation on [{}]. Pipeline: {}",
-          pageable.isPaged() ? "paged" : "unpaged",
+          "Executing unpaged aggregation on [{}]. Pipeline: {}",
           collection,
           aggregation.toPipeline(Aggregation.DEFAULT_CONTEXT));
     }
