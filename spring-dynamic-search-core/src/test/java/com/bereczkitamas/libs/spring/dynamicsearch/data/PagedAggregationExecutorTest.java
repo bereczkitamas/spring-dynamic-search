@@ -112,9 +112,21 @@ class PagedAggregationExecutorTest {
                   java.time.LocalDate.class,
                   SearchOperation.EQUALS,
                   SearchOperation.LESS_THAN,
-                  SearchOperation.BETWEEN));
+                  SearchOperation.BETWEEN),
+              "items",
+              FieldMapping.arrayField(
+                  "items",
+                  ArrayElementDescriptor.of(
+                      Map.of(
+                          "code", FieldMapping.of("code", String.class, SearchOperation.EQUALS, SearchOperation.LIKE),
+                          "qty", FieldMapping.of("qty", Integer.class, SearchOperation.EQUALS, SearchOperation.GREATER_THAN, SearchOperation.LESS_THAN))),
+                  SearchOperation.ELEM_MATCH,
+                  SearchOperation.SIZE,
+                  SearchOperation.IS_NULL,
+                  SearchOperation.IS_NOT_NULL));
 
   record TestEntity(String name, int age) {}
+
 
   @BeforeEach
   void setUp() {
@@ -826,7 +838,127 @@ class PagedAggregationExecutorTest {
 
       assertEquals(java.time.LocalDate.of(2000, 1, 1), result.getValue());
     }
+
+    @Test
+    void shouldValidateAndTransformElemMatchCriteria() {
+      SearchCriteria input =
+          SearchCriteria.builder()
+              .field("items")
+              .operation(SearchOperation.ELEM_MATCH)
+              .elementOperator("AND")
+              .elementCriteria(
+                  List.of(
+                      new SearchCriteria("code", SearchOperation.EQUALS, "SKU123"),
+                      new SearchCriteria("qty", SearchOperation.GREATER_THAN, "5")))
+              .build();
+
+      SearchCriteria result = validator.validateAndTransform(input, REGISTRY);
+
+      assertEquals("items", result.getField());
+      assertEquals(SearchOperation.ELEM_MATCH, result.getOperation());
+      assertEquals("AND", result.getElementOperator());
+      assertNotNull(result.getElementCriteria());
+      assertEquals(2, result.getElementCriteria().size());
+
+      SearchCriteria innerCode = result.getElementCriteria().get(0);
+      assertEquals("code", innerCode.getField());
+      assertEquals("SKU123", innerCode.getValue());
+
+      SearchCriteria innerQty = result.getElementCriteria().get(1);
+      assertEquals("qty", innerQty.getField());
+      assertEquals(5, innerQty.getValue()); // converted from "5" string to Integer
+    }
+
+    @Test
+    void shouldThrow_whenElemMatchOnNonArrayField() {
+      SearchCriteria input =
+          SearchCriteria.builder()
+              .field("name")
+              .operation(SearchOperation.ELEM_MATCH)
+              .elementCriteria(List.of(new SearchCriteria("code", SearchOperation.EQUALS, "X")))
+              .build();
+
+      assertThrows(
+          InvalidSearchOperationException.class,
+          () -> validator.validateAndTransform(input, REGISTRY));
+    }
+
+    @Test
+    void shouldThrow_whenElemMatchHasEmptyCriteria() {
+      SearchCriteria input =
+          SearchCriteria.builder()
+              .field("items")
+              .operation(SearchOperation.ELEM_MATCH)
+              .elementCriteria(List.of())
+              .build();
+
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> validator.validateAndTransform(input, REGISTRY));
+    }
+
+    @Test
+    void shouldThrow_whenElemMatchFieldNotFoundOnElement() {
+      SearchCriteria input =
+          SearchCriteria.builder()
+              .field("items")
+              .operation(SearchOperation.ELEM_MATCH)
+              .elementCriteria(List.of(new SearchCriteria("nonExistent", SearchOperation.EQUALS, "X")))
+              .build();
+
+      assertThrows(
+          InvalidSearchFieldException.class,
+          () -> validator.validateAndTransform(input, REGISTRY));
+    }
+
+    @Test
+    void shouldThrow_whenElemMatchOperationNotAllowedOnElementField() {
+      SearchCriteria input =
+          SearchCriteria.builder()
+              .field("items")
+              .operation(SearchOperation.ELEM_MATCH)
+              .elementCriteria(List.of(new SearchCriteria("qty", SearchOperation.REGEX, ".*")))
+              .build();
+
+      assertThrows(
+          InvalidSearchOperationException.class,
+          () -> validator.validateAndTransform(input, REGISTRY));
+    }
+
+    @Test
+    void shouldThrow_whenInvalidElementOperator() {
+      SearchCriteria input =
+          SearchCriteria.builder()
+              .field("items")
+              .operation(SearchOperation.ELEM_MATCH)
+              .elementOperator("XOR")
+              .elementCriteria(List.of(new SearchCriteria("code", SearchOperation.EQUALS, "X")))
+              .build();
+
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> validator.validateAndTransform(input, REGISTRY));
+    }
+
+    @Test
+    void shouldValidateAndTransformSizeOperation() {
+      SearchCriteria input = new SearchCriteria("items", SearchOperation.SIZE, "3");
+      SearchCriteria result = validator.validateAndTransform(input, REGISTRY);
+
+      assertEquals("items", result.getField());
+      assertEquals(SearchOperation.SIZE, result.getOperation());
+      assertEquals(3, result.getValue());
+    }
+
+    @Test
+    void shouldThrow_whenSizeIsNegative() {
+      SearchCriteria input = new SearchCriteria("items", SearchOperation.SIZE, -1);
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> validator.validateAndTransform(input, REGISTRY));
+    }
   }
+
 
   // ============================
   // MongoCriteriaBuilder
@@ -1057,7 +1189,77 @@ class PagedAggregationExecutorTest {
       Criteria combined = builder.combine(List.of(single), SearchRequest.AND_OPERATOR);
       assertEquals(single, combined);
     }
+
+    @Test
+    void shouldBuildElemMatch_withSingleInnerCriteria() {
+      SearchCriteria sc =
+          SearchCriteria.builder()
+              .field("items")
+              .operation(SearchOperation.ELEM_MATCH)
+              .elementCriteria(List.of(new SearchCriteria("code", SearchOperation.EQUALS, "SKU1")))
+              .build();
+
+      Criteria c = builder.buildCriteria(sc);
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      org.bson.Document itemsDoc = (org.bson.Document) doc.get("items");
+      org.bson.Document elemMatchDoc = (org.bson.Document) itemsDoc.get("$elemMatch");
+      assertEquals("SKU1", elemMatchDoc.get("code"));
+    }
+
+    @Test
+    void shouldBuildElemMatch_withMultipleInnerCriteriaAnd() {
+      SearchCriteria sc =
+          SearchCriteria.builder()
+              .field("items")
+              .operation(SearchOperation.ELEM_MATCH)
+              .elementOperator("AND")
+              .elementCriteria(
+                  List.of(
+                      new SearchCriteria("code", SearchOperation.EQUALS, "SKU1"),
+                      new SearchCriteria("qty", SearchOperation.GREATER_THAN, 10)))
+              .build();
+
+      Criteria c = builder.buildCriteria(sc);
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      org.bson.Document itemsDoc = (org.bson.Document) doc.get("items");
+      org.bson.Document elemMatchDoc = (org.bson.Document) itemsDoc.get("$elemMatch");
+      assertTrue(elemMatchDoc.containsKey("$and"));
+    }
+
+    @Test
+    void shouldBuildElemMatch_withMultipleInnerCriteriaOr() {
+      SearchCriteria sc =
+          SearchCriteria.builder()
+              .field("items")
+              .operation(SearchOperation.ELEM_MATCH)
+              .elementOperator("OR")
+              .elementCriteria(
+                  List.of(
+                      new SearchCriteria("code", SearchOperation.EQUALS, "SKU1"),
+                      new SearchCriteria("code", SearchOperation.EQUALS, "SKU2")))
+              .build();
+
+      Criteria c = builder.buildCriteria(sc);
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      org.bson.Document itemsDoc = (org.bson.Document) doc.get("items");
+      org.bson.Document elemMatchDoc = (org.bson.Document) itemsDoc.get("$elemMatch");
+      assertTrue(elemMatchDoc.containsKey("$or"));
+    }
+
+    @Test
+    void shouldBuildSize() {
+      SearchCriteria sc = new SearchCriteria("items", SearchOperation.SIZE, 3);
+      Criteria c = builder.buildCriteria(sc);
+      assertNotNull(c);
+      org.bson.Document doc = c.getCriteriaObject();
+      org.bson.Document itemsDoc = (org.bson.Document) doc.get("items");
+      assertEquals(3, itemsDoc.get("$size"));
+    }
   }
+
 
   // ============================
   // MongoQueryBuilder
@@ -1303,6 +1505,192 @@ class PagedAggregationExecutorTest {
       assertTrue(joins.isEmpty());
     }
   }
+
+  // ============================
+  // SearchRequestBuilder (Fluent DSL)
+  // ============================
+
+  @Nested
+  class SearchRequestBuilderTests {
+
+    @Test
+    void shouldBuildSearchRequest_withFluentDsl() {
+      SearchRequest request =
+          SearchRequestBuilder.search()
+              .and()
+              .where("name", SearchOperation.EQUALS, "Alice")
+              .where("age", SearchOperation.GREATER_THAN, 18)
+              .elemMatch(
+                  "items",
+                  "AND",
+                  em ->
+                      em.where("code", SearchOperation.EQUALS, "SKU1")
+                          .where("qty", SearchOperation.GREATER_THAN, 5))
+              .group(
+                  g ->
+                      g.or()
+                          .where("status", SearchOperation.EQUALS, "ACTIVE")
+                          .where("status", SearchOperation.EQUALS, "PENDING"))
+              .build();
+
+      assertEquals(SearchRequest.AND_OPERATOR, request.getOperator());
+      assertEquals(3, request.getCriteria().size());
+      assertEquals(1, request.getGroups().size());
+
+      SearchCriteria elemCriteria = request.getCriteria().get(2);
+      assertEquals("items", elemCriteria.getField());
+      assertEquals(SearchOperation.ELEM_MATCH, elemCriteria.getOperation());
+      assertEquals("AND", elemCriteria.getElementOperator());
+      assertEquals(2, elemCriteria.getElementCriteria().size());
+
+      SearchGroup group = request.getGroups().getFirst();
+      assertEquals(SearchRequest.OR_OPERATOR, group.getOperator());
+      assertEquals(2, group.getCriteria().size());
+    }
+  }
+
+  // ============================
+  // Bosch Diagnostic Approval Scenario Test
+  // ============================
+
+  enum ActionTypeEnum {
+    REPAIR,
+    NEW_TOOL_EXCHANGE,
+    SPARE_PARTS_EXCHANGE,
+    ACCESSORIES_EXCHANGE
+  }
+
+  enum JobTypeEnum {
+    WARRANTY,
+    SERVICE_OFFERING,
+    COMMERCIAL_GOODWILL
+  }
+
+  enum ApprovalStatusEnum {
+    PENDING,
+    APPROVED,
+    REJECTED
+  }
+
+  enum DiagnosticStatusEnum {
+    APPROVAL_PENDING,
+    COMPLETED
+  }
+
+  static class Material {
+    @com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField
+    private JobTypeEnum jobType;
+
+    @com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField
+    private ApprovalStatusEnum status;
+  }
+
+  static class Diagnostics {
+    @com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField
+    private ActionTypeEnum actionType;
+
+    @com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField
+    private DiagnosticStatusEnum status;
+
+    @com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField
+    private Set<Material> materials;
+  }
+
+  @Nested
+  class BoschApprovalSearchScenarioTest {
+
+    private final Map<ActionTypeEnum, List<JobTypeEnum>> BOSCH_INTERNAL_APPROVAL_CRITERIA =
+        Map.of(
+            ActionTypeEnum.REPAIR,
+            List.of(JobTypeEnum.COMMERCIAL_GOODWILL),
+            ActionTypeEnum.NEW_TOOL_EXCHANGE,
+            List.of(
+                JobTypeEnum.WARRANTY, JobTypeEnum.SERVICE_OFFERING, JobTypeEnum.COMMERCIAL_GOODWILL),
+            ActionTypeEnum.SPARE_PARTS_EXCHANGE,
+            List.of(
+                JobTypeEnum.WARRANTY, JobTypeEnum.SERVICE_OFFERING, JobTypeEnum.COMMERCIAL_GOODWILL),
+            ActionTypeEnum.ACCESSORIES_EXCHANGE,
+            List.of(
+                JobTypeEnum.WARRANTY, JobTypeEnum.SERVICE_OFFERING, JobTypeEnum.COMMERCIAL_GOODWILL));
+
+    @Test
+    void shouldBuildBoschDiagnosticApprovalSearchQuery() {
+      SearchFieldRegistry diagnosticsRegistry = SearchFieldRegistry.from(Diagnostics.class);
+
+      SearchRequest request =
+          SearchRequestBuilder.search()
+              .and()
+              .where("status", SearchOperation.EQUALS, DiagnosticStatusEnum.APPROVAL_PENDING)
+              .group(
+                  orGroup -> {
+                    orGroup.or();
+                    BOSCH_INTERNAL_APPROVAL_CRITERIA.forEach(
+                        (actionType, jobTypes) ->
+                            orGroup.subGroup(
+                                inner ->
+                                    inner
+                                        .and()
+                                        .where("actionType", SearchOperation.EQUALS, actionType)
+                                        .elemMatch(
+                                            "materials",
+                                            "AND",
+                                            em ->
+                                                em.where("jobType", SearchOperation.IN, jobTypes)
+                                                    .where(
+                                                        "status",
+                                                        SearchOperation.EQUALS,
+                                                        ApprovalStatusEnum.PENDING))));
+                  })
+              .build();
+
+      MongoQueryBuilder queryBuilder = new MongoQueryBuilder();
+      Criteria criteria = queryBuilder.build(request, diagnosticsRegistry);
+
+      assertNotNull(criteria);
+      org.bson.Document doc = criteria.getCriteriaObject();
+      assertTrue(doc.containsKey("$and"));
+
+      @SuppressWarnings("unchecked")
+      List<org.bson.Document> andClauses = (List<org.bson.Document>) doc.get("$and");
+      assertEquals(2, andClauses.size());
+
+      // First clause: status = APPROVAL_PENDING
+      org.bson.Document statusDoc = andClauses.get(0);
+      assertEquals(DiagnosticStatusEnum.APPROVAL_PENDING, statusDoc.get("status"));
+
+      // Second clause: $or group containing the 4 action type sub-groups with elemMatch
+      org.bson.Document orDoc = andClauses.get(1);
+      assertTrue(orDoc.containsKey("$or"));
+
+      @SuppressWarnings("unchecked")
+      List<org.bson.Document> orClauses = (List<org.bson.Document>) orDoc.get("$or");
+      assertEquals(4, orClauses.size());
+
+      // Verify each sub-group has actionType and materials.$elemMatch
+      for (org.bson.Document subGroupDoc : orClauses) {
+        assertTrue(subGroupDoc.containsKey("$and"));
+        @SuppressWarnings("unchecked")
+        List<org.bson.Document> innerAnd = (List<org.bson.Document>) subGroupDoc.get("$and");
+        assertEquals(2, innerAnd.size());
+
+        boolean hasActionType = innerAnd.stream().anyMatch(d -> d.containsKey("actionType"));
+        boolean hasMaterialsElemMatch =
+            innerAnd.stream()
+                .anyMatch(
+                    d -> {
+                      if (d.containsKey("materials")) {
+                        org.bson.Document matDoc = (org.bson.Document) d.get("materials");
+                        return matDoc.containsKey("$elemMatch");
+                      }
+                      return false;
+                    });
+
+        assertTrue(hasActionType);
+        assertTrue(hasMaterialsElemMatch);
+      }
+    }
+  }
+
 
   // ============================
   // Helper methods

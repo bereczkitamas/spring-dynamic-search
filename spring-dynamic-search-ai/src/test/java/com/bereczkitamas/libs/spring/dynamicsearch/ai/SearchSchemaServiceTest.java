@@ -85,20 +85,68 @@ class SearchSchemaServiceTest {
     assertTrue(prompt.contains("Operation Guidelines"));
   }
 
+  static class OrderItemDto {
+    @SearchableField(description = "Item product SKU", examples = {"SKU-100", "SKU-200"})
+    private String sku;
+
+    @SearchableField(description = "Item price")
+    private double price;
+  }
+
+  static class OrderDto {
+    @SearchableField(description = "Order identifier")
+    private String orderId;
+
+    @SearchableField(description = "List of items in order")
+    private java.util.List<OrderItemDto> items;
+  }
+
+  @Test
+  void shouldDescribeArrayFieldWithElementFields() {
+    SearchSchemaDescription schema = schemaService.describe(OrderDto.class);
+
+    FieldSchema itemsField =
+        schema.getFields().stream().filter(f -> f.getName().equals("items")).findFirst().orElseThrow();
+    assertTrue(itemsField.isArrayField());
+    assertNotNull(itemsField.getElementFields());
+    assertEquals(2, itemsField.getElementFields().size());
+
+    FieldSchema skuField =
+        itemsField.getElementFields().stream().filter(f -> f.getName().equals("sku")).findFirst().orElseThrow();
+    assertEquals("sku", skuField.getName());
+    assertEquals("Item product SKU", skuField.getDescription());
+  }
+
+  @Test
+  void shouldIncludeElemMatchAndElementFieldsInSystemPrompt() {
+    String prompt =
+        schemaService.generateSystemPrompt(
+            com.bereczkitamas.libs.spring.dynamicsearch.data.SimpleSearchFieldRegistry.from(OrderDto.class),
+            "Order");
+
+    assertNotNull(prompt);
+    assertTrue(prompt.contains("Element Fields (for ELEM_MATCH):"));
+    assertTrue(prompt.contains("`sku` (String)"));
+    assertTrue(prompt.contains("ELEM_MATCH"));
+    assertTrue(prompt.contains("SIZE"));
+  }
+
   @Test
   @SuppressWarnings("unchecked")
-  void shouldGenerateJsonSchema() {
+  void shouldGenerateJsonSchemaWithElementCriteria() {
     Map<String, Object> jsonSchema =
         schemaService.generateJsonSchema(
-            com.bereczkitamas.libs.spring.dynamicsearch.data.SimpleSearchFieldRegistry.from(CustomerDto.class),
-            "Customer");
+            com.bereczkitamas.libs.spring.dynamicsearch.data.SimpleSearchFieldRegistry.from(OrderDto.class),
+            "Order");
 
     assertNotNull(jsonSchema);
-    assertEquals("object", jsonSchema.get("type"));
-    assertEquals("CustomerSearchRequest", jsonSchema.get("title"));
-
     Map<String, Object> props = (Map<String, Object>) jsonSchema.get("properties");
-    assertNotNull(props.get("criteria"));
-    assertNotNull(props.get("operator"));
+    Map<String, Object> criteriaProp = (Map<String, Object>) props.get("criteria");
+    Map<String, Object> itemsSchema = (Map<String, Object>) criteriaProp.get("items");
+    Map<String, Object> criterionProps = (Map<String, Object>) itemsSchema.get("properties");
+
+    assertTrue(criterionProps.containsKey("elementCriteria"));
+    assertTrue(criterionProps.containsKey("elementOperator"));
   }
 }
+

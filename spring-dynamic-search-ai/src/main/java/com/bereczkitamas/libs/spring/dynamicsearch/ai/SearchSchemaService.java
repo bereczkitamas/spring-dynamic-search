@@ -35,24 +35,7 @@ public class SearchSchemaService {
 
     List<FieldSchema> fields =
         registry.getMappings().entrySet().stream()
-            .map(
-                entry -> {
-                  String name = entry.getKey();
-                  FieldMapping mapping = entry.getValue();
-                  return FieldSchema.builder()
-                      .name(name)
-                      .type(mapping.getType() != null ? mapping.getType().getSimpleName() : "Object")
-                      .description(mapping.getDescription())
-                      .allowedOperations(
-                          mapping.getAllowedOperations().stream()
-                              .map(Enum::name)
-                              .collect(Collectors.toSet()))
-                      .examples(mapping.getExamples())
-                      .joined(mapping.isJoined())
-                      .projectable(mapping.isProjectable())
-                      .searchable(mapping.isSearchable())
-                      .build();
-                })
+            .map(entry -> toFieldSchema(entry.getKey(), entry.getValue()))
             .sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName()))
             .toList();
 
@@ -66,6 +49,33 @@ public class SearchSchemaService {
         .entityName(entityName)
         .fields(fields)
         .supportedOperations(ops)
+        .build();
+  }
+
+  private FieldSchema toFieldSchema(String name, FieldMapping mapping) {
+    List<FieldSchema> elemFields = null;
+    if (mapping.isArrayField() && mapping.getArrayElement() != null) {
+      elemFields =
+          mapping.getArrayElement().getElementFields().entrySet().stream()
+              .map(e -> toFieldSchema(e.getKey(), e.getValue()))
+              .sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName()))
+              .toList();
+    }
+
+    return FieldSchema.builder()
+        .name(name)
+        .type(mapping.getType() != null ? mapping.getType().getSimpleName() : "Object")
+        .description(mapping.getDescription())
+        .allowedOperations(
+            mapping.getAllowedOperations().stream()
+                .map(Enum::name)
+                .collect(Collectors.toSet()))
+        .examples(mapping.getExamples())
+        .joined(mapping.isJoined())
+        .projectable(mapping.isProjectable())
+        .searchable(mapping.isSearchable())
+        .arrayField(mapping.isArrayField())
+        .elementFields(elemFields)
         .build();
   }
 
@@ -96,24 +106,22 @@ public class SearchSchemaService {
     sb.append("#### Available Search Fields:\n");
 
     for (FieldSchema field : schema.getFields()) {
-      sb.append("- `").append(field.getName()).append("` (").append(field.getType()).append(")");
-      if (field.getDescription() != null && !field.getDescription().isBlank()) {
-        sb.append(": ").append(field.getDescription());
-      }
-      if (field.getExamples() != null && !field.getExamples().isEmpty()) {
-        sb.append(" | Examples: ").append(String.join(", ", field.getExamples()));
-      }
-      if (field.getAllowedOperations() != null && !field.getAllowedOperations().isEmpty()) {
-        sb.append("\n  - Allowed Operations: ").append(String.join(", ", field.getAllowedOperations()));
-      }
-      sb.append("\n");
+      appendFieldPrompt(sb, field, "  ");
     }
 
     sb.append("\n#### SearchRequest JSON Structure:\n");
     sb.append("```json\n");
     sb.append("{\n");
     sb.append("  \"criteria\": [\n");
-    sb.append("    { \"field\": \"<fieldName>\", \"operation\": \"<OPERATION>\", \"value\": <value> }\n");
+    sb.append("    { \"field\": \"<fieldName>\", \"operation\": \"<OPERATION>\", \"value\": <value> },\n");
+    sb.append("    {\n");
+    sb.append("      \"field\": \"<arrayField>\",\n");
+    sb.append("      \"operation\": \"ELEM_MATCH\",\n");
+    sb.append("      \"elementOperator\": \"AND\" | \"OR\",\n");
+    sb.append("      \"elementCriteria\": [\n");
+    sb.append("        { \"field\": \"<nestedField>\", \"operation\": \"<OPERATION>\", \"value\": <value> }\n");
+    sb.append("      ]\n");
+    sb.append("    }\n");
     sb.append("  ],\n");
     sb.append("  \"operator\": \"AND\" | \"OR\",\n");
     sb.append("  \"groups\": [\n");
@@ -128,8 +136,38 @@ public class SearchSchemaService {
     sb.append("- `BETWEEN`, `NOT_BETWEEN`: 2-element array `[min, max]`, e.g. `\"value\": [10, 50]` or `[\"2025-01-01\", \"2025-12-31\"]`\n");
     sb.append("- `EXISTS`, `DOES_NOT_EXIST`, `IS_EMPTY`, `IS_NOT_EMPTY`: boolean value `true`\n");
     sb.append("- `CONTAINS_ALL`: array of values required in collection\n");
+    sb.append("- `SIZE`: integer array length\n");
+    sb.append("- `ELEM_MATCH`: used on array fields; requires `elementCriteria` array and optional `elementOperator` (\"AND\" or \"OR\")\n");
 
     return sb.toString();
+  }
+
+  private void appendFieldPrompt(StringBuilder sb, FieldSchema field, String indent) {
+    sb.append("- `").append(field.getName()).append("` (").append(field.getType()).append(")");
+    if (field.getDescription() != null && !field.getDescription().isBlank()) {
+      sb.append(": ").append(field.getDescription());
+    }
+    if (field.getExamples() != null && !field.getExamples().isEmpty()) {
+      sb.append(" | Examples: ").append(String.join(", ", field.getExamples()));
+    }
+    if (field.getAllowedOperations() != null && !field.getAllowedOperations().isEmpty()) {
+      sb.append("\n").append(indent).append("- Allowed Operations: ").append(String.join(", ", field.getAllowedOperations()));
+    }
+    if (field.isArrayField() && field.getElementFields() != null && !field.getElementFields().isEmpty()) {
+      sb.append("\n").append(indent).append("- Element Fields (for ELEM_MATCH):\n");
+      for (FieldSchema elemField : field.getElementFields()) {
+        sb.append(indent).append("  - `").append(elemField.getName()).append("` (").append(elemField.getType()).append(")");
+        if (elemField.getDescription() != null && !elemField.getDescription().isBlank()) {
+          sb.append(": ").append(elemField.getDescription());
+        }
+        if (elemField.getAllowedOperations() != null && !elemField.getAllowedOperations().isEmpty()) {
+          sb.append(" [").append(String.join(", ", elemField.getAllowedOperations())).append("]");
+        }
+        sb.append("\n");
+      }
+    } else {
+      sb.append("\n");
+    }
   }
 
   /**
@@ -141,9 +179,30 @@ public class SearchSchemaService {
     List<String> allowedFieldNames = schema.getFields().stream().map(FieldSchema::getName).toList();
     List<String> allowedOps = schema.getSupportedOperations();
 
+    Map<String, Object> innerCriterionSchema = new LinkedHashMap<>();
+    innerCriterionSchema.put("type", "object");
+    innerCriterionSchema.put("required", List.of("field", "operation"));
+
+    Map<String, Object> innerCritProps = new LinkedHashMap<>();
+    Map<String, Object> innerFieldProp = new LinkedHashMap<>();
+    innerFieldProp.put("type", "string");
+    innerFieldProp.put("description", "Nested field name on the array element");
+    innerCritProps.put("field", innerFieldProp);
+
+    Map<String, Object> innerOpProp = new LinkedHashMap<>();
+    innerOpProp.put("type", "string");
+    innerOpProp.put("enum", allowedOps);
+    innerOpProp.put("description", "Filter operator on nested element");
+    innerCritProps.put("operation", innerOpProp);
+
+    Map<String, Object> innerValProp = new LinkedHashMap<>();
+    innerValProp.put("description", "Filter value on nested element");
+    innerCritProps.put("value", innerValProp);
+    innerCriterionSchema.put("properties", innerCritProps);
+
     Map<String, Object> criterionSchema = new LinkedHashMap<>();
     criterionSchema.put("type", "object");
-    criterionSchema.put("required", List.of("field", "operation", "value"));
+    criterionSchema.put("required", List.of("field", "operation"));
 
     Map<String, Object> critProps = new LinkedHashMap<>();
 
@@ -160,8 +219,21 @@ public class SearchSchemaService {
     critProps.put("operation", opProp);
 
     Map<String, Object> valProp = new LinkedHashMap<>();
-    valProp.put("description", "Filter value (scalar, array for IN/BETWEEN/CONTAINS_ALL, or true for EXISTS/EMPTY)");
+    valProp.put("description", "Filter value (scalar, array for IN/BETWEEN/CONTAINS_ALL, integer for SIZE, or true for EXISTS/EMPTY)");
     critProps.put("value", valProp);
+
+    Map<String, Object> elemCritProp = new LinkedHashMap<>();
+    elemCritProp.put("type", "array");
+    elemCritProp.put("items", innerCriterionSchema);
+    elemCritProp.put("description", "Nested criteria applied to array elements (used with ELEM_MATCH)");
+    critProps.put("elementCriteria", elemCritProp);
+
+    Map<String, Object> elemOpProp = new LinkedHashMap<>();
+    elemOpProp.put("type", "string");
+    elemOpProp.put("enum", List.of("AND", "OR"));
+    elemOpProp.put("default", "AND");
+    elemOpProp.put("description", "Logical operator between elementCriteria (AND or OR)");
+    critProps.put("elementOperator", elemOpProp);
 
     criterionSchema.put("properties", critProps);
 
@@ -187,4 +259,5 @@ public class SearchSchemaService {
     rootSchema.put("properties", rootProps);
     return rootSchema;
   }
+
 }

@@ -15,6 +15,7 @@ public class FieldMapping {
   private final boolean alwaysIncluded; // always in response (e.g., id)
   private final String description;
   private final Set<String> examples;
+  private final ArrayElementDescriptor arrayElement;
 
   public FieldMapping(
       String documentField,
@@ -24,7 +25,7 @@ public class FieldMapping {
       boolean projectable,
       boolean searchable,
       boolean alwaysIncluded) {
-    this(documentField, type, allowedOperations, join, projectable, searchable, alwaysIncluded, "", Collections.emptySet());
+    this(documentField, type, allowedOperations, join, projectable, searchable, alwaysIncluded, "", Collections.emptySet(), null);
   }
 
   public FieldMapping(
@@ -37,6 +38,20 @@ public class FieldMapping {
       boolean alwaysIncluded,
       String description,
       Set<String> examples) {
+    this(documentField, type, allowedOperations, join, projectable, searchable, alwaysIncluded, description, examples, null);
+  }
+
+  public FieldMapping(
+      String documentField,
+      Class<?> type,
+      Set<SearchOperation> allowedOperations,
+      JoinDescriptor join,
+      boolean projectable,
+      boolean searchable,
+      boolean alwaysIncluded,
+      String description,
+      Set<String> examples,
+      ArrayElementDescriptor arrayElement) {
     this.documentField = documentField;
     this.type = type;
     this.allowedOperations = allowedOperations != null ? allowedOperations : Collections.emptySet();
@@ -46,6 +61,7 @@ public class FieldMapping {
     this.alwaysIncluded = alwaysIncluded;
     this.description = description != null ? description : "";
     this.examples = examples != null ? Collections.unmodifiableSet(examples) : Collections.emptySet();
+    this.arrayElement = arrayElement;
   }
 
   // Local field factory
@@ -68,7 +84,33 @@ public class FieldMapping {
     return new FieldMapping(documentField, type, Set.of(ops), join, true, true, false);
   }
 
+  // Array field factories
+  public static FieldMapping arrayField(
+      String documentField, ArrayElementDescriptor elementDescriptor, SearchOperation... ops) {
+    Set<SearchOperation> operations = ops.length > 0 ? Set.of(ops) : Set.of(SearchOperation.ELEM_MATCH, SearchOperation.SIZE);
+    return new FieldMapping(
+        documentField,
+        java.util.Collection.class,
+        operations,
+        null,
+        true,
+        true,
+        false,
+        "",
+        Collections.emptySet(),
+        elementDescriptor);
+  }
+
+  public static FieldMapping arrayField(
+      String documentField, Class<?> elementClass, SearchOperation... ops) {
+    return arrayField(documentField, ArrayElementDescriptor.from(elementClass), ops);
+  }
+
   public boolean isJoined() {
     return join != null;
+  }
+
+  public boolean isArrayField() {
+    return arrayElement != null;
   }
 }

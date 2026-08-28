@@ -21,5 +21,8 @@ public enum SearchOperation {
   DOES_NOT_EXIST,
   IS_EMPTY,
   IS_NOT_EMPTY,
-  CONTAINS_ALL
+  CONTAINS_ALL,
+  ELEM_MATCH,
+  SIZE
 }
+

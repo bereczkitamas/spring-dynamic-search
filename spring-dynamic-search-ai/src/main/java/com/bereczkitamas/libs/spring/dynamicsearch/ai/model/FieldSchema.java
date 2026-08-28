@@ -18,4 +18,7 @@ public class FieldSchema {
   boolean joined;
   boolean projectable;
   boolean searchable;
+  boolean arrayField;
+  java.util.List<FieldSchema> elementFields;
 }
+

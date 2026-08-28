@@ -1,6 +1,6 @@
 ---
-description: Workspace rules for Java build environment, Spring Boot library packaging, and dependency management
-globs: ["**/*.java", "pom.xml", "**/mvnw*"]
+description: Workspace rules for Java build environment, Spring Boot library packaging, dependency management, skill placement, and SemVer conventions
+globs: ["**/*.java", "pom.xml", "**/mvnw*", ".agents/**/*"]
 always_on: true
 ---
 
@@ -20,3 +20,13 @@ always_on: true
 
 ## 4. Task Completion Workflow
 - After finishing each task and verifying tests/build, always prompt the user to commit and push changes to git.
+
+## 5. Skill Scope & Placement
+- **Project-Specific Skills (`.agents/skills/`)**: Only place workflows, runbooks, and CI/CD procedures dedicated strictly to this project (e.g. `maven-central-release`) in the project repository.
+- **Global Skills (`~/.gemini/config/skills/`)**: Place cross-project, universal engineering skills (e.g. `code-review`, clean code checklists) in the global user configuration to prevent cluttering the project git repository.
+
+## 6. Pre-1.0 Semantic Versioning (SemVer)
+- During initial development (`0.y.z`):
+  - Breaking API modifications increment the **minor** version (e.g. `0.0.1` -> `0.1.0`).
+  - Compatible features and bugfixes increment the **patch** version (e.g. `0.1.0` -> `0.1.1`).
+  - Reserve `1.0.0` for the first official stable production release.

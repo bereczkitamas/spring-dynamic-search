@@ -58,4 +58,11 @@ public @interface SearchableField {
    * Example values for this field (used in AI agent prompt schemas).
    */
   String[] examples() default {};
+
+  /**
+   * The target Java type of array/collection elements for ELEM_MATCH search operations.
+   * If {@code void.class}, automatically inferred from generic type parameters (e.g. List&lt;Material&gt;).
+   */
+  Class<?> elementClass() default void.class;
 }
+

@@ -1,5 +1,6 @@
 package com.bereczkitamas.libs.spring.dynamicsearch.annotation;
 
+import com.bereczkitamas.libs.spring.dynamicsearch.data.ArrayElementDescriptor;
 import com.bereczkitamas.libs.spring.dynamicsearch.data.FieldMapping;
 import com.bereczkitamas.libs.spring.dynamicsearch.data.JoinDescriptor;
 import com.bereczkitamas.libs.spring.dynamicsearch.data.SearchOperation;
@@ -84,7 +85,10 @@ public final class SearchAnnotationScanner {
       String propertyName = component.getName();
       SearchableField searchable = component.getAnnotation(SearchableField.class);
       if (searchable != null && !mappings.containsKey(propertyName)) {
-        mappings.put(propertyName, buildSearchableMapping(propertyName, searchable, component.getType()));
+        mappings.put(
+            propertyName,
+            buildSearchableMapping(
+                propertyName, searchable, component.getType(), component.getGenericType()));
       }
 
       JoinedField[] joinedFields = component.getAnnotationsByType(JoinedField.class);
@@ -102,7 +106,9 @@ public final class SearchAnnotationScanner {
       String propertyName = field.getName();
       SearchableField searchable = field.getAnnotation(SearchableField.class);
       if (searchable != null && !mappings.containsKey(propertyName)) {
-        mappings.put(propertyName, buildSearchableMapping(propertyName, searchable, field.getType()));
+        mappings.put(
+            propertyName,
+            buildSearchableMapping(propertyName, searchable, field.getType(), field.getGenericType()));
       }
 
       JoinedField[] joinedFields = field.getAnnotationsByType(JoinedField.class);
@@ -128,7 +134,10 @@ public final class SearchAnnotationScanner {
       Class<?> returnType = method.getReturnType();
 
       if (searchable != null && !mappings.containsKey(propertyName)) {
-        mappings.put(propertyName, buildSearchableMapping(propertyName, searchable, returnType));
+        mappings.put(
+            propertyName,
+            buildSearchableMapping(
+                propertyName, searchable, returnType, method.getGenericReturnType()));
       }
 
       for (JoinedField joined : joinedFields) {
@@ -141,13 +150,26 @@ public final class SearchAnnotationScanner {
   }
 
   private static FieldMapping buildSearchableMapping(
-      String propertyName, SearchableField annotation, Class<?> fallbackType) {
+      String propertyName,
+      SearchableField annotation,
+      Class<?> fallbackType,
+      java.lang.reflect.Type genericType) {
     String docField = annotation.documentField().isBlank() ? propertyName : annotation.documentField();
     Class<?> type = resolveType(annotation.type(), fallbackType);
+
+    ArrayElementDescriptor arrayElement = null;
+    Class<?> elemClass = resolveElementClass(annotation, genericType, type);
+    if (elemClass != null) {
+      Map<String, FieldMapping> elementMappings = scan(elemClass);
+      if (!elementMappings.isEmpty() || (annotation.elementClass() != null && annotation.elementClass() != void.class)) {
+        arrayElement = new ArrayElementDescriptor(elementMappings);
+      }
+    }
+
     Set<SearchOperation> ops =
         annotation.operations().length > 0
             ? Set.of(annotation.operations())
-            : defaultOperationsForType(type);
+            : defaultOperationsForType(type, arrayElement != null);
 
     return new FieldMapping(
         docField,
@@ -158,8 +180,38 @@ public final class SearchAnnotationScanner {
         annotation.searchable(),
         annotation.alwaysIncluded(),
         annotation.description(),
-        Set.of(annotation.examples()));
+        Set.of(annotation.examples()),
+        arrayElement);
   }
+
+  private static Class<?> resolveElementClass(
+      SearchableField annotation, java.lang.reflect.Type genericType, Class<?> rawType) {
+    if (annotation != null && annotation.elementClass() != void.class) {
+      return annotation.elementClass();
+    }
+    if (rawType != null && rawType.isArray()) {
+      return rawType.getComponentType();
+    }
+    if (rawType != null
+        && Collection.class.isAssignableFrom(rawType)
+        && genericType instanceof java.lang.reflect.ParameterizedType paramType) {
+      java.lang.reflect.Type[] typeArgs = paramType.getActualTypeArguments();
+      if (typeArgs.length > 0) {
+        java.lang.reflect.Type arg = typeArgs[0];
+        if (arg instanceof Class<?> elemClass) {
+          return elemClass;
+        }
+        if (arg instanceof java.lang.reflect.WildcardType wildcardType) {
+          java.lang.reflect.Type[] upperBounds = wildcardType.getUpperBounds();
+          if (upperBounds.length > 0 && upperBounds[0] instanceof Class<?> elemClass) {
+            return elemClass;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
 
   private static FieldMapping buildJoinedMapping(
       String propertyName, JoinedField annotation, Class<?> fallbackType) {
@@ -202,6 +254,10 @@ public final class SearchAnnotationScanner {
   }
 
   public static Set<SearchOperation> defaultOperationsForType(Class<?> type) {
+    return defaultOperationsForType(type, false);
+  }
+
+  public static Set<SearchOperation> defaultOperationsForType(Class<?> type, boolean hasArrayElements) {
     if (type == null) {
       return EnumSet.allOf(SearchOperation.class);
     }
@@ -273,7 +329,22 @@ public final class SearchAnnotationScanner {
     }
 
     if (Collection.class.isAssignableFrom(type) || type.isArray()) {
+      if (hasArrayElements) {
+        return Set.of(
+            SearchOperation.ELEM_MATCH,
+            SearchOperation.SIZE,
+            SearchOperation.IN,
+            SearchOperation.NOT_IN,
+            SearchOperation.CONTAINS_ALL,
+            SearchOperation.IS_EMPTY,
+            SearchOperation.IS_NOT_EMPTY,
+            SearchOperation.IS_NULL,
+            SearchOperation.IS_NOT_NULL,
+            SearchOperation.EXISTS,
+            SearchOperation.DOES_NOT_EXIST);
+      }
       return Set.of(
+          SearchOperation.SIZE,
           SearchOperation.IN,
           SearchOperation.NOT_IN,
           SearchOperation.CONTAINS_ALL,
@@ -295,6 +366,7 @@ public final class SearchAnnotationScanner {
         SearchOperation.EXISTS,
         SearchOperation.DOES_NOT_EXIST);
   }
+
 
   private static String extractPropertyName(String methodName) {
     if (methodName.startsWith("get") && methodName.length() > 3) {

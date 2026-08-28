@@ -241,4 +241,65 @@ class SearchAnnotationScannerTest {
       assertEquals("custom_path", registry.resolve("customField").getDocumentField());
     }
   }
+
+  // Sample Nested Array DTOs
+  static class MaterialDto {
+    @SearchableField
+    private String jobType;
+
+    @SearchableField
+    private String status;
+  }
+
+  static class DiagnosticDto {
+    @SearchableField
+    private String actionType;
+
+    @SearchableField
+    private List<MaterialDto> materials;
+
+    @SearchableField(elementClass = MaterialDto.class)
+    private Set<Object> explicitMaterials;
+  }
+
+  @Nested
+  class ArrayAndNestedScanningTests {
+
+    @Test
+    void shouldScanArrayFieldsWithGenericType() {
+      Map<String, FieldMapping> mappings = SearchAnnotationScanner.scan(DiagnosticDto.class);
+
+      FieldMapping materials = mappings.get("materials");
+      assertNotNull(materials);
+      assertTrue(materials.isArrayField());
+      assertNotNull(materials.getArrayElement());
+      assertTrue(materials.getAllowedOperations().contains(SearchOperation.ELEM_MATCH));
+      assertTrue(materials.getAllowedOperations().contains(SearchOperation.SIZE));
+
+      // Check inner fields
+      FieldMapping jobType = materials.getArrayElement().resolveElementField("jobType");
+      assertNotNull(jobType);
+      assertEquals("jobType", jobType.getDocumentField());
+
+      FieldMapping status = materials.getArrayElement().resolveElementField("status");
+      assertNotNull(status);
+      assertEquals("status", status.getDocumentField());
+    }
+
+    @Test
+    void shouldScanArrayFieldsWithExplicitElementClass() {
+      Map<String, FieldMapping> mappings = SearchAnnotationScanner.scan(DiagnosticDto.class);
+
+      FieldMapping explicitMaterials = mappings.get("explicitMaterials");
+      assertNotNull(explicitMaterials);
+      assertTrue(explicitMaterials.isArrayField());
+      assertNotNull(explicitMaterials.getArrayElement());
+      assertTrue(explicitMaterials.getAllowedOperations().contains(SearchOperation.ELEM_MATCH));
+
+      FieldMapping jobType = explicitMaterials.getArrayElement().resolveElementField("jobType");
+      assertNotNull(jobType);
+      assertEquals("jobType", jobType.getDocumentField());
+    }
+  }
 }
+

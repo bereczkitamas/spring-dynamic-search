@@ -49,7 +49,19 @@ public class MongoCriteriaBuilder {
               Criteria.where(field).ne(List.of()),
               Criteria.where(field).ne(""));
       case CONTAINS_ALL -> Criteria.where(field).all(toCollection(value));
+      case ELEM_MATCH -> {
+        List<SearchCriteria> elementCriteria = sc.getElementCriteria();
+        if (elementCriteria == null || elementCriteria.isEmpty()) {
+          yield new Criteria();
+        }
+        List<Criteria> innerCriteriaList =
+            elementCriteria.stream().map(this::buildCriteria).toList();
+        Criteria innerCombined = combine(innerCriteriaList, sc.getElementOperator());
+        yield Criteria.where(field).elemMatch(innerCombined);
+      }
+      case SIZE -> Criteria.where(field).size(((Number) value).intValue());
     };
+
   }
 
   private List<?> toList(Object value) {
