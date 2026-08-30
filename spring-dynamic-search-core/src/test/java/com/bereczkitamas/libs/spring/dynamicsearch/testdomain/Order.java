@@ -24,6 +24,7 @@ public class Order {
   private Instant orderDate;
   private User customer;
   private String customerId;
+  private List<String> assetIds;
   private List<Asset> assets;
   private Map<String, Object> attributes;
 }

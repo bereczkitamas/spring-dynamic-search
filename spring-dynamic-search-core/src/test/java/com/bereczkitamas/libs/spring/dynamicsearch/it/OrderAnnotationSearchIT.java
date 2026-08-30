@@ -36,15 +36,17 @@ class OrderAnnotationSearchIT extends AbstractMongoIntegrationTest {
     assertNotNull(registry.resolve("channel"));
     assertNotNull(registry.resolve("priority"));
     assertNotNull(registry.resolve("couponCode"));
-    assertNotNull(registry.resolve("joinedCustomerName"));
-    assertNotNull(registry.resolve("joinedCustomerEmail"));
 
-    // Verify documentField mappings
+    // Verify documentField mappings and join indicators
     assertEquals("customer.name", registry.resolve("customerName").getDocumentField());
+    assertTrue(registry.resolve("customerName").isJoined());
     assertEquals("customer.address.city", registry.resolve("customerCity").getDocumentField());
+    assertTrue(registry.resolve("customerCity").isJoined());
+    assertEquals("assets", registry.resolve("assets").getDocumentField());
+    assertTrue(registry.resolve("assets").isJoined());
+    assertTrue(registry.resolve("assets").isArrayField());
     assertEquals("attributes.channel", registry.resolve("channel").getDocumentField());
-    assertEquals("joinedCustomer.name", registry.resolve("joinedCustomerName").getDocumentField());
-    assertTrue(registry.resolve("joinedCustomerName").isJoined());
+    assertFalse(registry.resolve("channel").isJoined());
   }
 
   @Test
@@ -62,8 +64,8 @@ class OrderAnnotationSearchIT extends AbstractMongoIntegrationTest {
   }
 
   @Test
-  @DisplayName("Search by nested customer fields scanned from annotations")
-  void testNestedCustomerSearch() {
+  @DisplayName("Search by joined customer fields scanned from annotations")
+  void testJoinedCustomerSearch() {
     SearchRequest request =
         SearchRequestBuilder.search()
             .where("customerName", SearchOperation.LIKE, "Alice")
@@ -97,8 +99,8 @@ class OrderAnnotationSearchIT extends AbstractMongoIntegrationTest {
   }
 
   @Test
-  @DisplayName("Search subdocument array assets using ELEM_MATCH on scanned elementClass")
-  void testAssetsElemMatchSearch() {
+  @DisplayName("Search joined assets array using ELEM_MATCH on scanned elementClass")
+  void testJoinedAssetsElemMatchSearch() {
     SearchRequest request =
         SearchRequestBuilder.search()
             .elemMatch(
@@ -114,10 +116,12 @@ class OrderAnnotationSearchIT extends AbstractMongoIntegrationTest {
 
     assertEquals(1, response.total());
     assertEquals("ORD-1002", response.data().getFirst().getOrderNumber());
+    assertNotNull(response.data().getFirst().getAssets());
+    assertEquals("PowerEdge R750", response.data().getFirst().getAssets().getFirst().getName());
   }
 
   @Test
-  @DisplayName("Search by date ranges on orderDate and customerLastLoggedIn")
+  @DisplayName("Search by date ranges on orderDate and joined customerLastLoggedIn")
   void testDateRangesSearch() {
     Instant start = Instant.parse("2026-01-01T00:00:00Z");
     Instant end = Instant.parse("2026-01-31T23:59:59Z");
@@ -136,11 +140,11 @@ class OrderAnnotationSearchIT extends AbstractMongoIntegrationTest {
   }
 
   @Test
-  @DisplayName("Search across joined users collection scanned via @JoinedField")
-  void testJoinedUserSearch() {
+  @DisplayName("Search across joined users collection scanned via customerEmail")
+  void testJoinedCustomerEmailSearch() {
     SearchRequest request =
         SearchRequestBuilder.search()
-            .where("joinedCustomerEmail", SearchOperation.EQUALS, "diana@example.com")
+            .where("customerEmail", SearchOperation.EQUALS, "diana@example.com")
             .build();
 
     PagedSearchResponse<Order> response =
@@ -148,6 +152,7 @@ class OrderAnnotationSearchIT extends AbstractMongoIntegrationTest {
 
     assertEquals(1, response.total());
     assertEquals("ORD-1004", response.data().getFirst().getOrderNumber());
+    assertEquals("Diana Prince", response.data().getFirst().getCustomer().getName());
   }
 
   @Test

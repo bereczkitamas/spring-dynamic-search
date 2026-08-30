@@ -12,11 +12,21 @@ public class MongoTestDataSeeder {
   public static final String USER_ID_CHARLIE = "usr-003";
   public static final String USER_ID_DIANA = "usr-004";
 
+  public static final String ASSET_ID_DELL_XPS = "ast-1";
+  public static final String ASSET_ID_MX_MASTER = "ast-2";
+  public static final String ASSET_ID_POWEREDGE = "ast-3";
+  public static final String ASSET_ID_APC_RACK = "ast-4";
+  public static final String ASSET_ID_LG_4K = "ast-5";
+  public static final String ASSET_ID_MACBOOK = "ast-6";
+  public static final String ASSET_ID_ANKER_HUB = "ast-7";
+  public static final String ASSET_ID_KEYCHRON = "ast-8";
+
   public static void seedData(MongoTemplate mongoTemplate) {
     mongoTemplate.dropCollection(Order.class);
     mongoTemplate.dropCollection(User.class);
+    mongoTemplate.dropCollection(Asset.class);
 
-    // 1. Seed Users
+    // 1. Seed Users (into 'users' collection)
     User alice =
         User.builder()
             .id(USER_ID_ALICE)
@@ -83,7 +93,91 @@ public class MongoTestDataSeeder {
 
     mongoTemplate.insertAll(List.of(alice, bob, charlie, diana));
 
-    // 2. Seed Orders
+    // 2. Seed Assets (into 'assets' collection)
+    Asset asset1 =
+        Asset.builder()
+            .id(ASSET_ID_DELL_XPS)
+            .name("Dell XPS 15")
+            .category("LAPTOP")
+            .price(1200.0)
+            .tags(List.of("electronics", "work"))
+            .specifications(Map.of("brand", "Dell", "ram", "32GB"))
+            .build();
+
+    Asset asset2 =
+        Asset.builder()
+            .id(ASSET_ID_MX_MASTER)
+            .name("MX Master 3")
+            .category("ACCESSORY")
+            .price(50.0)
+            .tags(List.of("usb", "work"))
+            .specifications(Map.of("brand", "Logitech"))
+            .build();
+
+    Asset asset3 =
+        Asset.builder()
+            .id(ASSET_ID_POWEREDGE)
+            .name("PowerEdge R750")
+            .category("SERVER")
+            .price(3000.0)
+            .tags(List.of("enterprise", "hardware"))
+            .specifications(Map.of("brand", "Dell", "ram", "128GB"))
+            .build();
+
+    Asset asset4 =
+        Asset.builder()
+            .id(ASSET_ID_APC_RACK)
+            .name("APC Smart-UPS Rack")
+            .category("ACCESSORY")
+            .price(400.0)
+            .tags(List.of("hardware"))
+            .specifications(Map.of("brand", "APC"))
+            .build();
+
+    Asset asset5 =
+        Asset.builder()
+            .id(ASSET_ID_LG_4K)
+            .name("LG UltraFine 4K")
+            .category("MONITOR")
+            .price(450.0)
+            .tags(List.of("display", "electronics"))
+            .specifications(Map.of("brand", "LG", "resolution", "4K"))
+            .build();
+
+    Asset asset6 =
+        Asset.builder()
+            .id(ASSET_ID_MACBOOK)
+            .name("MacBook Pro 16")
+            .category("LAPTOP")
+            .price(2000.0)
+            .tags(List.of("apple", "work"))
+            .specifications(Map.of("brand", "Apple", "ram", "16GB"))
+            .build();
+
+    Asset asset7 =
+        Asset.builder()
+            .id(ASSET_ID_ANKER_HUB)
+            .name("Anker USB-C Hub")
+            .category("ACCESSORY")
+            .price(100.0)
+            .tags(List.of("usb"))
+            .specifications(Map.of("brand", "Anker"))
+            .build();
+
+    Asset asset8 =
+        Asset.builder()
+            .id(ASSET_ID_KEYCHRON)
+            .name("Keychron Q1")
+            .category("ACCESSORY")
+            .price(80.0)
+            .tags(List.of("gaming", "usb"))
+            .specifications(Map.of("brand", "Keychron"))
+            .build();
+
+    mongoTemplate.insertAll(
+        List.of(asset1, asset2, asset3, asset4, asset5, asset6, asset7, asset8));
+
+    // 3. Seed Orders (into 'orders' collection) with foreign key references
     Order order1 =
         Order.builder()
             .id("ord-1001")
@@ -91,26 +185,8 @@ public class MongoTestDataSeeder {
             .status("COMPLETED")
             .totalAmount(1250.0)
             .orderDate(Instant.parse("2026-01-10T10:00:00Z"))
-            .customer(alice)
             .customerId(USER_ID_ALICE)
-            .assets(
-                List.of(
-                    Asset.builder()
-                        .id("ast-1")
-                        .name("Dell XPS 15")
-                        .category("LAPTOP")
-                        .price(1200.0)
-                        .tags(List.of("electronics", "work"))
-                        .specifications(Map.of("brand", "Dell", "ram", "32GB"))
-                        .build(),
-                    Asset.builder()
-                        .id("ast-2")
-                        .name("MX Master 3")
-                        .category("ACCESSORY")
-                        .price(50.0)
-                        .tags(List.of("usb", "work"))
-                        .specifications(Map.of("brand", "Logitech"))
-                        .build()))
+            .assetIds(List.of(ASSET_ID_DELL_XPS, ASSET_ID_MX_MASTER))
             .attributes(
                 Map.of(
                     "channel", "web",
@@ -126,26 +202,8 @@ public class MongoTestDataSeeder {
             .status("PROCESSING")
             .totalAmount(3400.0)
             .orderDate(Instant.parse("2026-01-15T14:30:00Z"))
-            .customer(bob)
             .customerId(USER_ID_BOB)
-            .assets(
-                List.of(
-                    Asset.builder()
-                        .id("ast-3")
-                        .name("PowerEdge R750")
-                        .category("SERVER")
-                        .price(3000.0)
-                        .tags(List.of("enterprise", "hardware"))
-                        .specifications(Map.of("brand", "Dell", "ram", "128GB"))
-                        .build(),
-                    Asset.builder()
-                        .id("ast-4")
-                        .name("APC Smart-UPS Rack")
-                        .category("ACCESSORY")
-                        .price(400.0)
-                        .tags(List.of("hardware"))
-                        .specifications(Map.of("brand", "APC"))
-                        .build()))
+            .assetIds(List.of(ASSET_ID_POWEREDGE, ASSET_ID_APC_RACK))
             .attributes(
                 Map.of(
                     "channel", "enterprise",
@@ -160,18 +218,8 @@ public class MongoTestDataSeeder {
             .status("NEW")
             .totalAmount(450.0)
             .orderDate(Instant.parse("2026-02-01T09:15:00Z"))
-            .customer(charlie)
             .customerId(USER_ID_CHARLIE)
-            .assets(
-                List.of(
-                    Asset.builder()
-                        .id("ast-5")
-                        .name("LG UltraFine 4K")
-                        .category("MONITOR")
-                        .price(450.0)
-                        .tags(List.of("display", "electronics"))
-                        .specifications(Map.of("brand", "LG", "resolution", "4K"))
-                        .build()))
+            .assetIds(List.of(ASSET_ID_LG_4K))
             .attributes(
                 Map.of(
                     "channel", "web",
@@ -186,26 +234,8 @@ public class MongoTestDataSeeder {
             .status("COMPLETED")
             .totalAmount(2100.0)
             .orderDate(Instant.parse("2026-02-15T16:45:00Z"))
-            .customer(diana)
             .customerId(USER_ID_DIANA)
-            .assets(
-                List.of(
-                    Asset.builder()
-                        .id("ast-6")
-                        .name("MacBook Pro 16")
-                        .category("LAPTOP")
-                        .price(2000.0)
-                        .tags(List.of("apple", "work"))
-                        .specifications(Map.of("brand", "Apple", "ram", "16GB"))
-                        .build(),
-                    Asset.builder()
-                        .id("ast-7")
-                        .name("Anker USB-C Hub")
-                        .category("ACCESSORY")
-                        .price(100.0)
-                        .tags(List.of("usb"))
-                        .specifications(Map.of("brand", "Anker"))
-                        .build()))
+            .assetIds(List.of(ASSET_ID_MACBOOK, ASSET_ID_ANKER_HUB))
             .attributes(
                 Map.of(
                     "channel", "mobile",
@@ -220,18 +250,8 @@ public class MongoTestDataSeeder {
             .status("CANCELLED")
             .totalAmount(80.0)
             .orderDate(Instant.parse("2026-02-20T11:00:00Z"))
-            .customer(alice)
             .customerId(USER_ID_ALICE)
-            .assets(
-                List.of(
-                    Asset.builder()
-                        .id("ast-8")
-                        .name("Keychron Q1")
-                        .category("ACCESSORY")
-                        .price(80.0)
-                        .tags(List.of("gaming", "usb"))
-                        .specifications(Map.of("brand", "Keychron"))
-                        .build()))
+            .assetIds(List.of(ASSET_ID_KEYCHRON))
             .attributes(
                 Map.of(
                     "channel", "in-store",

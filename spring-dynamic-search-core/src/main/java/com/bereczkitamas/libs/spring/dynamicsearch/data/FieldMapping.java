@@ -106,6 +106,28 @@ public class FieldMapping {
     return arrayField(documentField, ArrayElementDescriptor.from(elementClass), ops);
   }
 
+  // Joined Array field factories
+  public static FieldMapping joinedArray(
+      String documentField, JoinDescriptor join, ArrayElementDescriptor elementDescriptor, SearchOperation... ops) {
+    Set<SearchOperation> operations = ops.length > 0 ? Set.of(ops) : Set.of(SearchOperation.ELEM_MATCH, SearchOperation.SIZE);
+    return new FieldMapping(
+        documentField,
+        java.util.Collection.class,
+        operations,
+        join,
+        true,
+        true,
+        false,
+        "",
+        Collections.emptySet(),
+        elementDescriptor);
+  }
+
+  public static FieldMapping joinedArray(
+      String documentField, JoinDescriptor join, Class<?> elementClass, SearchOperation... ops) {
+    return joinedArray(documentField, join, ArrayElementDescriptor.from(elementClass), ops);
+  }
+
   public boolean isJoined() {
     return join != null;
   }

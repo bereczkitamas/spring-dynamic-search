@@ -6,7 +6,6 @@ import com.bereczkitamas.libs.spring.dynamicsearch.data.*;
 import com.bereczkitamas.libs.spring.dynamicsearch.testdomain.Asset;
 import com.bereczkitamas.libs.spring.dynamicsearch.testdomain.Order;
 import java.time.Instant;
-import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,7 +19,9 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
   @BeforeEach
   void setUpRegistry() {
     JoinDescriptor userJoin =
-        new JoinDescriptor("users", "customerId", "_id", "joinedCustomer", true);
+        new JoinDescriptor("users", "customerId", "_id", "customer", true);
+    JoinDescriptor assetsJoin =
+        new JoinDescriptor("assets", "assetIds", "_id", "assets", false);
 
     registry =
         SimpleSearchFieldRegistry.builder()
@@ -63,30 +64,43 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
                     SearchOperation.BETWEEN))
             .register(
                 "customerName",
-                FieldMapping.of(
+                FieldMapping.joined(
                     "customer.name",
                     String.class,
+                    userJoin,
                     SearchOperation.EQUALS,
                     SearchOperation.LIKE,
                     SearchOperation.STARTS_WITH))
             .register(
                 "customerEmail",
-                FieldMapping.of(
+                FieldMapping.joined(
                     "customer.email",
                     String.class,
+                    userJoin,
                     SearchOperation.EQUALS,
                     SearchOperation.ENDS_WITH))
             .register(
                 "customerCity",
-                FieldMapping.of(
+                FieldMapping.joined(
                     "customer.address.city",
                     String.class,
+                    userJoin,
                     SearchOperation.EQUALS,
                     SearchOperation.IN))
             .register(
+                "customerLastLoggedIn",
+                FieldMapping.joined(
+                    "customer.lastLoggedIn",
+                    Instant.class,
+                    userJoin,
+                    SearchOperation.GREATER_THAN,
+                    SearchOperation.LESS_THAN,
+                    SearchOperation.BETWEEN))
+            .register(
                 "assets",
-                FieldMapping.arrayField(
+                FieldMapping.joinedArray(
                     "assets",
+                    assetsJoin,
                     Asset.class,
                     SearchOperation.ELEM_MATCH,
                     SearchOperation.SIZE))
@@ -104,19 +118,11 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
                     String.class,
                     SearchOperation.EQUALS,
                     SearchOperation.IN))
-            .register(
-                "joinedCustomerName",
-                FieldMapping.joined(
-                    "joinedCustomer.name",
-                    String.class,
-                    userJoin,
-                    SearchOperation.EQUALS,
-                    SearchOperation.LIKE))
             .build();
   }
 
   @Test
-  @DisplayName("Simple field EQUALS search on status")
+  @DisplayName("Simple local field EQUALS search on status")
   void testSimpleFieldEqualsSearch() {
     SearchRequest request =
         SearchRequestBuilder.search()
@@ -133,8 +139,8 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
   }
 
   @Test
-  @DisplayName("Nested object path search on customer.address.city")
-  void testNestedCustomerCitySearch() {
+  @DisplayName("Joined User search on customer.address.city via $lookup on users")
+  void testJoinedCustomerCitySearch() {
     SearchRequest request =
         SearchRequestBuilder.search()
             .where("customerCity", SearchOperation.EQUALS, "Budapest")
@@ -167,8 +173,8 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
   }
 
   @Test
-  @DisplayName("Array ELEM_MATCH search on assets line items")
-  void testArrayElemMatchSearch() {
+  @DisplayName("Joined Array ELEM_MATCH search on assets via $lookup on assets collection")
+  void testJoinedArrayElemMatchSearch() {
     SearchRequest request =
         SearchRequestBuilder.search()
             .elemMatch(
@@ -184,11 +190,13 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
 
     assertEquals(1, response.total());
     assertEquals("ORD-1004", response.data().getFirst().getOrderNumber());
+    assertNotNull(response.data().getFirst().getAssets());
+    assertEquals("MacBook Pro 16", response.data().getFirst().getAssets().getFirst().getName());
   }
 
   @Test
-  @DisplayName("Array SIZE search on assets count")
-  void testArraySizeSearch() {
+  @DisplayName("Joined Array SIZE search on assets count")
+  void testJoinedArraySizeSearch() {
     SearchRequest request =
         SearchRequestBuilder.search()
             .where("assets", SearchOperation.SIZE, 1)
@@ -201,11 +209,11 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
   }
 
   @Test
-  @DisplayName("Joined field search using $lookup on users collection")
-  void testJoinedUserSearch() {
+  @DisplayName("Joined field search using $lookup on users collection by customer name")
+  void testJoinedUserNameSearch() {
     SearchRequest request =
         SearchRequestBuilder.search()
-            .where("joinedCustomerName", SearchOperation.EQUALS, "Bob Jones")
+            .where("customerName", SearchOperation.EQUALS, "Bob Jones")
             .build();
 
     PagedSearchResponse<Order> response =
@@ -213,17 +221,18 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
 
     assertEquals(1, response.total());
     assertEquals("ORD-1002", response.data().getFirst().getOrderNumber());
+    assertEquals("Bob Jones", response.data().getFirst().getCustomer().getName());
   }
 
   @Test
-  @DisplayName("Search with pagination and sorting by nested field")
+  @DisplayName("Search with pagination and sorting by joined field (customerName)")
   void testSearchWithPaginationAndSorting() {
     SearchRequest request =
         SearchRequestBuilder.search()
             .where("totalAmount", SearchOperation.GREATER_THAN, 100.0)
             .build();
 
-    // Sort by customer name descending
+    // Sort by joined customer name descending
     PageRequest pageable =
         PageRequest.of(0, 2, Sort.by(Sort.Direction.DESC, "customerName"));
 

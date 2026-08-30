@@ -91,4 +91,10 @@ public @interface JoinedField {
    * Example values for this field (used in AI agent prompt schemas).
    */
   String[] examples() default {};
+
+  /**
+   * The target Java type of array/collection elements for ELEM_MATCH search operations on joined arrays.
+   * If {@code void.class}, automatically inferred from generic type parameters or singleResult behavior.
+   */
+  Class<?> elementClass() default void.class;
 }

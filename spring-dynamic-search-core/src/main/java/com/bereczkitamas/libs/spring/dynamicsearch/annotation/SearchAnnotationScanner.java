@@ -75,7 +75,7 @@ public final class SearchAnnotationScanner {
             "Class-level @JoinedField on %s must specify a non-empty name()".formatted(targetClass.getName()));
       }
       if (!mappings.containsKey(propertyName)) {
-        mappings.put(propertyName, buildJoinedMapping(propertyName, joined, joined.type()));
+        mappings.put(propertyName, buildJoinedMapping(propertyName, joined, joined.type(), null));
       }
     }
   }
@@ -95,7 +95,7 @@ public final class SearchAnnotationScanner {
       for (JoinedField joined : joinedFields) {
         String name = joined.name().isBlank() ? propertyName : joined.name();
         if (!mappings.containsKey(name)) {
-          mappings.put(name, buildJoinedMapping(name, joined, component.getType()));
+          mappings.put(name, buildJoinedMapping(name, joined, component.getType(), component.getGenericType()));
         }
       }
     }
@@ -115,7 +115,7 @@ public final class SearchAnnotationScanner {
       for (JoinedField joined : joinedFields) {
         String name = joined.name().isBlank() ? propertyName : joined.name();
         if (!mappings.containsKey(name)) {
-          mappings.put(name, buildJoinedMapping(name, joined, field.getType()));
+          mappings.put(name, buildJoinedMapping(name, joined, field.getType(), field.getGenericType()));
         }
       }
     }
@@ -143,7 +143,7 @@ public final class SearchAnnotationScanner {
       for (JoinedField joined : joinedFields) {
         String name = joined.name().isBlank() ? propertyName : joined.name();
         if (!mappings.containsKey(name)) {
-          mappings.put(name, buildJoinedMapping(name, joined, returnType));
+          mappings.put(name, buildJoinedMapping(name, joined, returnType, method.getGenericReturnType()));
         }
       }
     }
@@ -214,16 +214,33 @@ public final class SearchAnnotationScanner {
 
 
   private static FieldMapping buildJoinedMapping(
-      String propertyName, JoinedField annotation, Class<?> fallbackType) {
+      String propertyName,
+      JoinedField annotation,
+      Class<?> fallbackType,
+      java.lang.reflect.Type genericType) {
     String docField =
         annotation.documentField().isBlank()
             ? (annotation.as() + "." + propertyName)
             : annotation.documentField();
     Class<?> type = resolveType(annotation.type(), fallbackType);
+
+    ArrayElementDescriptor arrayElement = null;
+    Class<?> elemClass = resolveJoinedElementClass(annotation, genericType, type);
+    if (elemClass != null) {
+      Map<String, FieldMapping> elementMappings = scan(elemClass);
+      if (!elementMappings.isEmpty() || (annotation.elementClass() != null && annotation.elementClass() != void.class)) {
+        arrayElement = new ArrayElementDescriptor(elementMappings);
+      }
+    }
+
+    if (arrayElement != null && (type == null || type == void.class)) {
+      type = Collection.class;
+    }
+
     Set<SearchOperation> ops =
         annotation.operations().length > 0
             ? Set.of(annotation.operations())
-            : defaultOperationsForType(type);
+            : defaultOperationsForType(type, arrayElement != null);
 
     JoinDescriptor join =
         new JoinDescriptor(
@@ -242,7 +259,16 @@ public final class SearchAnnotationScanner {
         annotation.searchable(),
         annotation.alwaysIncluded(),
         annotation.description(),
-        Set.of(annotation.examples()));
+        Set.of(annotation.examples()),
+        arrayElement);
+  }
+
+  private static Class<?> resolveJoinedElementClass(
+      JoinedField annotation, java.lang.reflect.Type genericType, Class<?> rawType) {
+    if (annotation != null && annotation.elementClass() != void.class) {
+      return annotation.elementClass();
+    }
+    return resolveElementClass(null, genericType, rawType);
   }
 
   private static Class<?> resolveType(Class<?> configuredType, Class<?> fallbackType) {
@@ -258,7 +284,21 @@ public final class SearchAnnotationScanner {
   }
 
   public static Set<SearchOperation> defaultOperationsForType(Class<?> type, boolean hasArrayElements) {
-    if (type == null) {
+    if (type == null || type == void.class) {
+      if (hasArrayElements) {
+        return Set.of(
+            SearchOperation.ELEM_MATCH,
+            SearchOperation.SIZE,
+            SearchOperation.IN,
+            SearchOperation.NOT_IN,
+            SearchOperation.CONTAINS_ALL,
+            SearchOperation.IS_EMPTY,
+            SearchOperation.IS_NOT_EMPTY,
+            SearchOperation.IS_NULL,
+            SearchOperation.IS_NOT_NULL,
+            SearchOperation.EXISTS,
+            SearchOperation.DOES_NOT_EXIST);
+      }
       return EnumSet.allOf(SearchOperation.class);
     }
 

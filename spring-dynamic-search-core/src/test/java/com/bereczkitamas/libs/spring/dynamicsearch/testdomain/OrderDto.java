@@ -17,23 +17,51 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @JoinedFields({
   @JoinedField(
-      name = "joinedCustomerName",
+      name = "customerName",
       type = String.class,
       collection = "users",
       localField = "customerId",
       foreignField = "_id",
-      as = "joinedCustomer",
-      documentField = "joinedCustomer.name",
+      as = "customer",
+      documentField = "customer.name",
       description = "Customer name via foreign collection join"),
   @JoinedField(
-      name = "joinedCustomerEmail",
+      name = "customerEmail",
       type = String.class,
       collection = "users",
       localField = "customerId",
       foreignField = "_id",
-      as = "joinedCustomer",
-      documentField = "joinedCustomer.email",
-      description = "Customer email via foreign collection join")
+      as = "customer",
+      documentField = "customer.email",
+      description = "Customer email via foreign collection join"),
+  @JoinedField(
+      name = "customerCity",
+      type = String.class,
+      collection = "users",
+      localField = "customerId",
+      foreignField = "_id",
+      as = "customer",
+      documentField = "customer.address.city",
+      description = "Customer city via foreign collection join"),
+  @JoinedField(
+      name = "customerLastLoggedIn",
+      type = Instant.class,
+      collection = "users",
+      localField = "customerId",
+      foreignField = "_id",
+      as = "customer",
+      documentField = "customer.lastLoggedIn",
+      description = "Customer last login timestamp via foreign collection join"),
+  @JoinedField(
+      name = "assets",
+      collection = "assets",
+      localField = "assetIds",
+      foreignField = "_id",
+      as = "assets",
+      documentField = "assets",
+      singleResult = false,
+      elementClass = Asset.class,
+      description = "List of ordered asset line items joined from assets collection")
 })
 public class OrderDto {
 
@@ -53,20 +81,12 @@ public class OrderDto {
   private Instant orderDate;
 
   private String customerId;
+  private List<String> assetIds;
 
-  @SearchableField(documentField = "customer.name", description = "Embedded customer name")
   private String customerName;
-
-  @SearchableField(documentField = "customer.email", description = "Embedded customer email")
   private String customerEmail;
-
-  @SearchableField(documentField = "customer.address.city", description = "Embedded customer shipping city")
   private String customerCity;
-
-  @SearchableField(documentField = "customer.lastLoggedIn", description = "Embedded customer last login timestamp")
   private Instant customerLastLoggedIn;
-
-  @SearchableField(elementClass = Asset.class, description = "List of ordered asset line items")
   private List<Asset> assets;
 
   @SearchableField(documentField = "attributes.channel", description = "Order origination channel")
