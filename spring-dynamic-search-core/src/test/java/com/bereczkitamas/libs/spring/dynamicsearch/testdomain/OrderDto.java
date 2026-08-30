@@ -10,7 +10,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.mongodb.core.mapping.DocumentReference;
 
 @Data
 @Builder
@@ -81,10 +80,7 @@ public class OrderDto {
   @SearchableField(description = "Timestamp when the order was placed")
   private Instant orderDate;
 
-  @DocumentReference(collection = "users")
   private User customer;
-
-  @DocumentReference(collection = "assets")
   private List<Asset> assets;
 
   private String customerName;
