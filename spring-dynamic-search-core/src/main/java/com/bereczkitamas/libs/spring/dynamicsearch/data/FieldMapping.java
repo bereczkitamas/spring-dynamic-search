@@ -1,5 +1,6 @@
 package com.bereczkitamas.libs.spring.dynamicsearch.data;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Set;
 import lombok.Data;
@@ -90,7 +91,7 @@ public class FieldMapping {
     Set<SearchOperation> operations = ops.length > 0 ? Set.of(ops) : Set.of(SearchOperation.ELEM_MATCH, SearchOperation.SIZE);
     return new FieldMapping(
         documentField,
-        java.util.Collection.class,
+        Collection.class,
         operations,
         null,
         true,
@@ -112,7 +113,7 @@ public class FieldMapping {
     Set<SearchOperation> operations = ops.length > 0 ? Set.of(ops) : Set.of(SearchOperation.ELEM_MATCH, SearchOperation.SIZE);
     return new FieldMapping(
         documentField,
-        java.util.Collection.class,
+        Collection.class,
         operations,
         join,
         true,

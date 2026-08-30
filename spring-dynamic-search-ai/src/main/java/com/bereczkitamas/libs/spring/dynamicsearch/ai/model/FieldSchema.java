@@ -1,5 +1,6 @@
 package com.bereczkitamas.libs.spring.dynamicsearch.ai.model;
 
+import java.util.List;
 import java.util.Set;
 import lombok.Builder;
 import lombok.Value;
@@ -19,6 +20,6 @@ public class FieldSchema {
   boolean projectable;
   boolean searchable;
   boolean arrayField;
-  java.util.List<FieldSchema> elementFields;
+  List<FieldSchema> elementFields;
 }
 

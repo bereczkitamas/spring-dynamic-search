@@ -6,7 +6,10 @@ import com.bereczkitamas.libs.spring.dynamicsearch.data.JoinDescriptor;
 import com.bereczkitamas.libs.spring.dynamicsearch.data.SearchOperation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
+import java.lang.reflect.Type;
+import java.lang.reflect.WildcardType;
 import java.time.temporal.Temporal;
 import java.util.Collection;
 import java.util.Collections;
@@ -153,7 +156,7 @@ public final class SearchAnnotationScanner {
       String propertyName,
       SearchableField annotation,
       Class<?> fallbackType,
-      java.lang.reflect.Type genericType) {
+      Type genericType) {
     String docField = annotation.documentField().isBlank() ? propertyName : annotation.documentField();
     Class<?> type = resolveType(annotation.type(), fallbackType);
 
@@ -185,7 +188,7 @@ public final class SearchAnnotationScanner {
   }
 
   private static Class<?> resolveElementClass(
-      SearchableField annotation, java.lang.reflect.Type genericType, Class<?> rawType) {
+      SearchableField annotation, Type genericType, Class<?> rawType) {
     if (annotation != null && annotation.elementClass() != void.class) {
       return annotation.elementClass();
     }
@@ -194,15 +197,15 @@ public final class SearchAnnotationScanner {
     }
     if (rawType != null
         && Collection.class.isAssignableFrom(rawType)
-        && genericType instanceof java.lang.reflect.ParameterizedType paramType) {
-      java.lang.reflect.Type[] typeArgs = paramType.getActualTypeArguments();
+        && genericType instanceof ParameterizedType paramType) {
+      Type[] typeArgs = paramType.getActualTypeArguments();
       if (typeArgs.length > 0) {
-        java.lang.reflect.Type arg = typeArgs[0];
+        Type arg = typeArgs[0];
         if (arg instanceof Class<?> elemClass) {
           return elemClass;
         }
-        if (arg instanceof java.lang.reflect.WildcardType wildcardType) {
-          java.lang.reflect.Type[] upperBounds = wildcardType.getUpperBounds();
+        if (arg instanceof WildcardType wildcardType) {
+          Type[] upperBounds = wildcardType.getUpperBounds();
           if (upperBounds.length > 0 && upperBounds[0] instanceof Class<?> elemClass) {
             return elemClass;
           }
@@ -217,7 +220,7 @@ public final class SearchAnnotationScanner {
       String propertyName,
       JoinedField annotation,
       Class<?> fallbackType,
-      java.lang.reflect.Type genericType) {
+      Type genericType) {
     String docField =
         annotation.documentField().isBlank()
             ? (annotation.as() + "." + propertyName)
@@ -264,7 +267,7 @@ public final class SearchAnnotationScanner {
   }
 
   private static Class<?> resolveJoinedElementClass(
-      JoinedField annotation, java.lang.reflect.Type genericType, Class<?> rawType) {
+      JoinedField annotation, Type genericType, Class<?> rawType) {
     if (annotation != null && annotation.elementClass() != void.class) {
       return annotation.elementClass();
     }

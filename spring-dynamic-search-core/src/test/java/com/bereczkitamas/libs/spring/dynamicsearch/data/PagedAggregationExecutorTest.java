@@ -1,5 +1,7 @@
 package com.bereczkitamas.libs.spring.dynamicsearch.data;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -15,9 +17,13 @@ import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -25,7 +31,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField;
 
 @ExtendWith(MockitoExtension.class)
 class PagedAggregationExecutorTest {
@@ -101,7 +109,7 @@ class PagedAggregationExecutorTest {
               "createdAt",
               FieldMapping.of(
                   "createdAt",
-                  java.time.Instant.class,
+                  Instant.class,
                   SearchOperation.GREATER_THAN,
                   SearchOperation.EQUALS,
                   SearchOperation.BETWEEN,
@@ -109,7 +117,7 @@ class PagedAggregationExecutorTest {
               "birthDate",
               FieldMapping.of(
                   "birthDate",
-                  java.time.LocalDate.class,
+                  LocalDate.class,
                   SearchOperation.EQUALS,
                   SearchOperation.LESS_THAN,
                   SearchOperation.BETWEEN),
@@ -596,7 +604,7 @@ class PagedAggregationExecutorTest {
       AggregationOptions options =
           AggregationOptions.builder()
               .allowDiskUse(true)
-              .maxTime(java.time.Duration.ofSeconds(5))
+              .maxTime(Duration.ofSeconds(5))
               .build();
 
       // When
@@ -607,7 +615,7 @@ class PagedAggregationExecutorTest {
       assertNotNull(aggregation);
       assertTrue(aggregation.getOptions().isAllowDiskUse());
       assertEquals(
-          java.time.Duration.ofSeconds(5), aggregation.getOptions().getMaxTime());
+          Duration.ofSeconds(5), aggregation.getOptions().getMaxTime());
     }
 
     @Test
@@ -769,7 +777,7 @@ class PagedAggregationExecutorTest {
           new SearchCriteria("createdAt", SearchOperation.GREATER_THAN, "2026-08-21T20:00:00Z");
       SearchCriteria result = validator.validateAndTransform(input, REGISTRY);
 
-      assertEquals(java.time.Instant.parse("2026-08-21T20:00:00Z"), result.getValue());
+      assertEquals(Instant.parse("2026-08-21T20:00:00Z"), result.getValue());
     }
 
     @Test
@@ -778,7 +786,7 @@ class PagedAggregationExecutorTest {
           new SearchCriteria("birthDate", SearchOperation.EQUALS, "1990-05-15");
       SearchCriteria result = validator.validateAndTransform(input, REGISTRY);
 
-      assertEquals(java.time.LocalDate.of(1990, 5, 15), result.getValue());
+      assertEquals(LocalDate.of(1990, 5, 15), result.getValue());
     }
 
     @Test
@@ -799,8 +807,8 @@ class PagedAggregationExecutorTest {
 
       assertEquals(
           List.of(
-              java.time.LocalDate.of(1990, 1, 1),
-              java.time.LocalDate.of(2000, 12, 31)),
+              LocalDate.of(1990, 1, 1),
+              LocalDate.of(2000, 12, 31)),
           result.getValue());
     }
 
@@ -828,15 +836,15 @@ class PagedAggregationExecutorTest {
 
     @Test
     void shouldSupportCustomObjectMapper() {
-      com.fasterxml.jackson.databind.ObjectMapper customMapper =
-          new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+      ObjectMapper customMapper =
+          new ObjectMapper().findAndRegisterModules();
       SearchCriteriaValidator customValidator = new SearchCriteriaValidator(customMapper);
 
       SearchCriteria input =
           new SearchCriteria("birthDate", SearchOperation.EQUALS, "2000-01-01");
       SearchCriteria result = customValidator.validateAndTransform(input, REGISTRY);
 
-      assertEquals(java.time.LocalDate.of(2000, 1, 1), result.getValue());
+      assertEquals(LocalDate.of(2000, 1, 1), result.getValue());
     }
 
     @Test
@@ -1015,10 +1023,10 @@ class PagedAggregationExecutorTest {
           builder.buildCriteria(
               new SearchCriteria("email", SearchOperation.REGEX, "^user_[0-9]+@domain\\.com$"));
       assertNotNull(c);
-      org.bson.Document doc = c.getCriteriaObject();
-      java.util.regex.Pattern pattern = (java.util.regex.Pattern) doc.get("email");
+      Document doc = c.getCriteriaObject();
+      Pattern pattern = (Pattern) doc.get("email");
       assertEquals("^user_[0-9]+@domain\\.com$", pattern.pattern());
-      assertTrue((pattern.flags() & java.util.regex.Pattern.CASE_INSENSITIVE) != 0);
+      assertTrue((pattern.flags() & Pattern.CASE_INSENSITIVE) != 0);
     }
 
     @Test
@@ -1243,9 +1251,9 @@ class PagedAggregationExecutorTest {
 
       Criteria c = builder.buildCriteria(sc);
       assertNotNull(c);
-      org.bson.Document doc = c.getCriteriaObject();
-      org.bson.Document itemsDoc = (org.bson.Document) doc.get("items");
-      org.bson.Document elemMatchDoc = (org.bson.Document) itemsDoc.get("$elemMatch");
+      Document doc = c.getCriteriaObject();
+      Document itemsDoc = (Document) doc.get("items");
+      Document elemMatchDoc = (Document) itemsDoc.get("$elemMatch");
       assertTrue(elemMatchDoc.containsKey("$or"));
     }
 
@@ -1254,8 +1262,8 @@ class PagedAggregationExecutorTest {
       SearchCriteria sc = new SearchCriteria("items", SearchOperation.SIZE, 3);
       Criteria c = builder.buildCriteria(sc);
       assertNotNull(c);
-      org.bson.Document doc = c.getCriteriaObject();
-      org.bson.Document itemsDoc = (org.bson.Document) doc.get("items");
+      Document doc = c.getCriteriaObject();
+      Document itemsDoc = (Document) doc.get("items");
       assertEquals(3, itemsDoc.get("$size"));
     }
   }
@@ -1344,7 +1352,7 @@ class PagedAggregationExecutorTest {
 
       Criteria preJoin = queryBuilder.buildPreJoinCriteria(request, REGISTRY);
       assertNotNull(preJoin);
-      org.bson.Document doc = preJoin.getCriteriaObject();
+      Document doc = preJoin.getCriteriaObject();
       // Should contain $and with age and the localGroup (name Alice or Bob), but NOT country.name
       assertNotNull(doc);
       String json = doc.toJson();
@@ -1374,7 +1382,7 @@ class PagedAggregationExecutorTest {
 
       Criteria postJoin = queryBuilder.buildPostJoinCriteria(request, REGISTRY);
       assertNotNull(postJoin);
-      org.bson.Document doc = postJoin.getCriteriaObject();
+      Document doc = postJoin.getCriteriaObject();
       String json = doc.toJson();
       // Should contain countryName (France) and mixed group, but NOT top-level age
       assertTrue(json.contains("country.name"));
@@ -1578,21 +1586,21 @@ class PagedAggregationExecutorTest {
   }
 
   static class Material {
-    @com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField
+    @SearchableField
     private JobTypeEnum jobType;
 
-    @com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField
+    @SearchableField
     private ApprovalStatusEnum status;
   }
 
   static class Diagnostics {
-    @com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField
+    @SearchableField
     private ActionTypeEnum actionType;
 
-    @com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField
+    @SearchableField
     private DiagnosticStatusEnum status;
 
-    @com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField
+    @SearchableField
     private Set<Material> materials;
   }
 
@@ -1647,30 +1655,30 @@ class PagedAggregationExecutorTest {
       Criteria criteria = queryBuilder.build(request, diagnosticsRegistry);
 
       assertNotNull(criteria);
-      org.bson.Document doc = criteria.getCriteriaObject();
+      Document doc = criteria.getCriteriaObject();
       assertTrue(doc.containsKey("$and"));
 
       @SuppressWarnings("unchecked")
-      List<org.bson.Document> andClauses = (List<org.bson.Document>) doc.get("$and");
+      List<Document> andClauses = (List<Document>) doc.get("$and");
       assertEquals(2, andClauses.size());
 
       // First clause: status = APPROVAL_PENDING
-      org.bson.Document statusDoc = andClauses.get(0);
+      Document statusDoc = andClauses.get(0);
       assertEquals(DiagnosticStatusEnum.APPROVAL_PENDING, statusDoc.get("status"));
 
       // Second clause: $or group containing the 4 action type sub-groups with elemMatch
-      org.bson.Document orDoc = andClauses.get(1);
+      Document orDoc = andClauses.get(1);
       assertTrue(orDoc.containsKey("$or"));
 
       @SuppressWarnings("unchecked")
-      List<org.bson.Document> orClauses = (List<org.bson.Document>) orDoc.get("$or");
+      List<Document> orClauses = (List<Document>) orDoc.get("$or");
       assertEquals(4, orClauses.size());
 
       // Verify each sub-group has actionType and materials.$elemMatch
-      for (org.bson.Document subGroupDoc : orClauses) {
+      for (Document subGroupDoc : orClauses) {
         assertTrue(subGroupDoc.containsKey("$and"));
         @SuppressWarnings("unchecked")
-        List<org.bson.Document> innerAnd = (List<org.bson.Document>) subGroupDoc.get("$and");
+        List<Document> innerAnd = (List<Document>) subGroupDoc.get("$and");
         assertEquals(2, innerAnd.size());
 
         boolean hasActionType = innerAnd.stream().anyMatch(d -> d.containsKey("actionType"));
@@ -1679,7 +1687,7 @@ class PagedAggregationExecutorTest {
                 .anyMatch(
                     d -> {
                       if (d.containsKey("materials")) {
-                        org.bson.Document matDoc = (org.bson.Document) d.get("materials");
+                        Document matDoc = (Document) d.get("materials");
                         return matDoc.containsKey("$elemMatch");
                       }
                       return false;
@@ -1699,32 +1707,32 @@ class PagedAggregationExecutorTest {
   @SuppressWarnings("unchecked")
   private void mockAggregation(List<TestEntity> entities, long totalCount) {
     when(mongoTemplate.getCollectionName(TestEntity.class)).thenReturn("testEntities");
-    List<org.bson.Document> dataDocs =
+    List<Document> dataDocs =
         entities.stream()
-            .map(e -> new org.bson.Document("name", e.name()).append("age", e.age()))
+            .map(e -> new Document("name", e.name()).append("age", e.age()))
             .toList();
-    List<org.bson.Document> totalDocs =
-        totalCount > 0 ? List.of(new org.bson.Document("total", totalCount)) : List.of();
-    org.bson.Document facetDoc =
-        new org.bson.Document(PagedAggregationExecutor.FIELD_DATA, dataDocs)
+    List<Document> totalDocs =
+        totalCount > 0 ? List.of(new Document("total", totalCount)) : List.of();
+    Document facetDoc =
+        new Document(PagedAggregationExecutor.FIELD_DATA, dataDocs)
             .append(PagedAggregationExecutor.FIELD_TOTAL_COUNT, totalDocs);
 
-    AggregationResults<org.bson.Document> aggResults =
-        (AggregationResults<org.bson.Document>) org.mockito.Mockito.mock(AggregationResults.class);
+    AggregationResults<Document> aggResults =
+        (AggregationResults<Document>) mock(AggregationResults.class);
     when(aggResults.getUniqueMappedResult()).thenReturn(facetDoc);
     when(mongoTemplate.aggregate(
-            any(Aggregation.class), eq("testEntities"), eq(org.bson.Document.class)))
+            any(Aggregation.class), eq("testEntities"), eq(Document.class)))
         .thenReturn(aggResults);
   }
 
   @SuppressWarnings("unchecked")
   private void mockNullAggregation() {
     when(mongoTemplate.getCollectionName(TestEntity.class)).thenReturn("testEntities");
-    AggregationResults<org.bson.Document> aggResults =
-        (AggregationResults<org.bson.Document>) org.mockito.Mockito.mock(AggregationResults.class);
+    AggregationResults<Document> aggResults =
+        (AggregationResults<Document>) mock(AggregationResults.class);
     when(aggResults.getUniqueMappedResult()).thenReturn(null);
     when(mongoTemplate.aggregate(
-            any(Aggregation.class), eq("testEntities"), eq(org.bson.Document.class)))
+            any(Aggregation.class), eq("testEntities"), eq(Document.class)))
         .thenReturn(aggResults);
   }
 
@@ -1732,7 +1740,7 @@ class PagedAggregationExecutorTest {
   private void mockUnpagedAggregation(List<TestEntity> entities) {
     when(mongoTemplate.getCollectionName(TestEntity.class)).thenReturn("testEntities");
     AggregationResults<TestEntity> aggResults =
-        (AggregationResults<TestEntity>) org.mockito.Mockito.mock(AggregationResults.class);
+        (AggregationResults<TestEntity>) mock(AggregationResults.class);
     when(aggResults.getMappedResults()).thenReturn(entities);
     when(mongoTemplate.aggregate(any(Aggregation.class), eq("testEntities"), eq(TestEntity.class)))
         .thenReturn(aggResults);

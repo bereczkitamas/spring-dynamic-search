@@ -6,6 +6,7 @@ import com.bereczkitamas.libs.spring.dynamicsearch.annotation.JoinedField;
 import com.bereczkitamas.libs.spring.dynamicsearch.annotation.SearchableField;
 import com.bereczkitamas.libs.spring.dynamicsearch.data.SearchOperation;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -98,7 +99,7 @@ class SearchSchemaServiceTest {
     private String orderId;
 
     @SearchableField(description = "List of items in order")
-    private java.util.List<OrderItemDto> items;
+    private List<OrderItemDto> items;
   }
 
   @Test

@@ -3,13 +3,17 @@ package com.bereczkitamas.libs.spring.dynamicsearch.ai.it;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.bereczkitamas.libs.spring.dynamicsearch.ai.DynamicSearchAiTool;
+import com.bereczkitamas.libs.spring.dynamicsearch.ai.model.FieldSchema;
 import com.bereczkitamas.libs.spring.dynamicsearch.ai.model.SearchSchemaDescription;
 import com.bereczkitamas.libs.spring.dynamicsearch.ai.model.SearchToolRequest;
 import com.bereczkitamas.libs.spring.dynamicsearch.ai.model.SearchToolResult;
 import com.bereczkitamas.libs.spring.dynamicsearch.data.*;
 import com.bereczkitamas.libs.spring.dynamicsearch.testdomain.Order;
 import com.bereczkitamas.libs.spring.dynamicsearch.testdomain.OrderDto;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -113,7 +117,7 @@ class OrderDynamicSearchAiToolIT extends AbstractAiMongoIntegrationTest {
         SearchRequest.builder()
             .operator("AND")
             .criteria(
-                java.util.List.of(
+                List.of(
                     new SearchCriteria("totlAmount", SearchOperation.GREATER_THAN, 1000.0)))
             .build();
 
@@ -138,8 +142,8 @@ class OrderDynamicSearchAiToolIT extends AbstractAiMongoIntegrationTest {
     assertNotNull(schema);
     assertEquals("Order", schema.getEntityName());
 
-    java.util.Set<String> fieldNames =
-        schema.getFields().stream().map(com.bereczkitamas.libs.spring.dynamicsearch.ai.model.FieldSchema::getName).collect(java.util.stream.Collectors.toSet());
+    Set<String> fieldNames =
+        schema.getFields().stream().map(FieldSchema::getName).collect(Collectors.toSet());
 
     assertTrue(fieldNames.contains("orderNumber"));
     assertTrue(fieldNames.contains("customerName"));

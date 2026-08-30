@@ -11,12 +11,14 @@ import de.flapdoodle.embed.mongo.transitions.RunningMongodProcess;
 import de.flapdoodle.reverse.StateID;
 import de.flapdoodle.reverse.TransitionWalker;
 import de.flapdoodle.reverse.Transitions;
+import java.util.Collections;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.SimpleMongoClientDatabaseFactory;
 import org.springframework.data.mongodb.core.convert.DefaultDbRefResolver;
 import org.springframework.data.mongodb.core.convert.MappingMongoConverter;
+import org.springframework.data.mongodb.core.convert.MongoCustomConversions;
 import org.springframework.data.mongodb.core.mapping.MongoMappingContext;
 
 public abstract class AbstractMongoIntegrationTest {
@@ -38,8 +40,8 @@ public abstract class AbstractMongoIntegrationTest {
       SimpleMongoClientDatabaseFactory dbFactory =
           new SimpleMongoClientDatabaseFactory(mongoClient, "spring_dynamic_search_it");
 
-      org.springframework.data.mongodb.core.convert.MongoCustomConversions conversions =
-          new org.springframework.data.mongodb.core.convert.MongoCustomConversions(java.util.Collections.emptyList());
+      MongoCustomConversions conversions =
+          new MongoCustomConversions(Collections.emptyList());
 
       MongoMappingContext mappingContext = new MongoMappingContext();
       mappingContext.setSimpleTypeHolder(conversions.getSimpleTypeHolder());

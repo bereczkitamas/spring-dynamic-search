@@ -2,7 +2,11 @@ package com.bereczkitamas.libs.spring.dynamicsearch.data;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Nullable;
+import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +21,7 @@ import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.aggregation.FacetOperation;
 import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
 import org.springframework.data.mongodb.core.convert.MongoConverter;
+import org.springframework.data.mongodb.core.mapping.DocumentReference;
 import org.springframework.data.mongodb.core.query.Criteria;
 
 /**
@@ -333,8 +338,8 @@ public class PagedAggregationExecutor {
   private <E> void populateJoinedDocumentReferences(
       E entity, Document doc, Class<E> entityClass, MongoConverter converter) {
     for (Class<?> c = entityClass; c != null && c != Object.class; c = c.getSuperclass()) {
-      for (java.lang.reflect.Field field : c.getDeclaredFields()) {
-        if (!field.isAnnotationPresent(org.springframework.data.mongodb.core.mapping.DocumentReference.class)) {
+      for (Field field : c.getDeclaredFields()) {
+        if (!field.isAnnotationPresent(DocumentReference.class)) {
           continue;
         }
         String fieldName = field.getName();
@@ -364,11 +369,11 @@ public class PagedAggregationExecutor {
     }
   }
 
-  private Class<?> resolveGenericElementType(java.lang.reflect.Field field) {
-    if (java.util.Collection.class.isAssignableFrom(field.getType())) {
-      java.lang.reflect.Type genericType = field.getGenericType();
-      if (genericType instanceof java.lang.reflect.ParameterizedType pt) {
-        java.lang.reflect.Type[] args = pt.getActualTypeArguments();
+  private Class<?> resolveGenericElementType(Field field) {
+    if (Collection.class.isAssignableFrom(field.getType())) {
+      Type genericType = field.getGenericType();
+      if (genericType instanceof ParameterizedType pt) {
+        Type[] args = pt.getActualTypeArguments();
         if (args.length > 0 && args[0] instanceof Class<?> clazz) {
           return clazz;
         }

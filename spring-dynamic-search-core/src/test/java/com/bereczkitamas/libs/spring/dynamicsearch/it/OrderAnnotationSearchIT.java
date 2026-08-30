@@ -7,6 +7,7 @@ import com.bereczkitamas.libs.spring.dynamicsearch.testdomain.Order;
 import com.bereczkitamas.libs.spring.dynamicsearch.testdomain.OrderDto;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -161,7 +162,7 @@ class OrderAnnotationSearchIT extends AbstractMongoIntegrationTest {
     SearchRequest request =
         SearchRequestBuilder.search()
             .where("status", SearchOperation.EQUALS, "COMPLETED")
-            .projection(ProjectionRequest.builder().include(java.util.Set.of("orderNumber", "totalAmount")).build())
+            .projection(ProjectionRequest.builder().include(Set.of("orderNumber", "totalAmount")).build())
             .build();
 
     PageRequest pageable =
