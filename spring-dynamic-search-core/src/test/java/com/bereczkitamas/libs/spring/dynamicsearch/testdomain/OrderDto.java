@@ -10,6 +10,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.data.mongodb.core.mapping.DocumentReference;
 
 @Data
 @Builder
@@ -20,48 +21,48 @@ import lombok.NoArgsConstructor;
       name = "customerName",
       type = String.class,
       collection = "users",
-      localField = "customerId",
+      localField = "customer",
       foreignField = "_id",
       as = "customer",
       documentField = "customer.name",
-      description = "Customer name via foreign collection join"),
+      description = "Customer name via referenced User document"),
   @JoinedField(
       name = "customerEmail",
       type = String.class,
       collection = "users",
-      localField = "customerId",
+      localField = "customer",
       foreignField = "_id",
       as = "customer",
       documentField = "customer.email",
-      description = "Customer email via foreign collection join"),
+      description = "Customer email via referenced User document"),
   @JoinedField(
       name = "customerCity",
       type = String.class,
       collection = "users",
-      localField = "customerId",
+      localField = "customer",
       foreignField = "_id",
       as = "customer",
       documentField = "customer.address.city",
-      description = "Customer city via foreign collection join"),
+      description = "Customer city via referenced User document"),
   @JoinedField(
       name = "customerLastLoggedIn",
       type = Instant.class,
       collection = "users",
-      localField = "customerId",
+      localField = "customer",
       foreignField = "_id",
       as = "customer",
       documentField = "customer.lastLoggedIn",
-      description = "Customer last login timestamp via foreign collection join"),
+      description = "Customer last login timestamp via referenced User document"),
   @JoinedField(
       name = "assets",
       collection = "assets",
-      localField = "assetIds",
+      localField = "assets",
       foreignField = "_id",
       as = "assets",
       documentField = "assets",
       singleResult = false,
       elementClass = Asset.class,
-      description = "List of ordered asset line items joined from assets collection")
+      description = "List of ordered asset line items via referenced Asset documents")
 })
 public class OrderDto {
 
@@ -80,14 +81,16 @@ public class OrderDto {
   @SearchableField(description = "Timestamp when the order was placed")
   private Instant orderDate;
 
-  private String customerId;
-  private List<String> assetIds;
+  @DocumentReference(collection = "users")
+  private User customer;
+
+  @DocumentReference(collection = "assets")
+  private List<Asset> assets;
 
   private String customerName;
   private String customerEmail;
   private String customerCity;
   private Instant customerLastLoggedIn;
-  private List<Asset> assets;
 
   @SearchableField(documentField = "attributes.channel", description = "Order origination channel")
   private String channel;

@@ -300,7 +300,7 @@ public class PagedAggregationExecutor {
 
       List<E> data =
           rawData.stream()
-              .map(doc -> converter != null ? converter.read(entityClass, doc) : objectMapper.convertValue(doc, entityClass))
+              .map(doc -> mapDocument(doc, entityClass, converter))
               .toList();
 
       return new PagedSearchResponse<>(data, total);
@@ -314,5 +314,66 @@ public class PagedAggregationExecutor {
     }
     List<E> data = mongoTemplate.aggregate(aggregation, collection, entityClass).getMappedResults();
     return new PagedSearchResponse<>(data, data.size());
+  }
+
+  private <E> E mapDocument(Document doc, Class<E> entityClass, @Nullable MongoConverter converter) {
+    if (converter != null) {
+      try {
+        E mapped = converter.read(entityClass, doc);
+        if (mapped != null) {
+          populateJoinedDocumentReferences(mapped, doc, entityClass, converter);
+          return mapped;
+        }
+      } catch (Exception ignored) {
+      }
+    }
+    return objectMapper.convertValue(doc, entityClass);
+  }
+
+  private <E> void populateJoinedDocumentReferences(
+      E entity, Document doc, Class<E> entityClass, MongoConverter converter) {
+    for (Class<?> c = entityClass; c != null && c != Object.class; c = c.getSuperclass()) {
+      for (java.lang.reflect.Field field : c.getDeclaredFields()) {
+        if (!field.isAnnotationPresent(org.springframework.data.mongodb.core.mapping.DocumentReference.class)) {
+          continue;
+        }
+        String fieldName = field.getName();
+        Object rawVal = doc.get(fieldName);
+        if (rawVal == null) {
+          continue;
+        }
+
+        try {
+          field.setAccessible(true);
+          if (rawVal instanceof Document subDoc) {
+            Object subEntity = converter.read(field.getType(), subDoc);
+            field.set(entity, subEntity);
+          } else if (rawVal instanceof List<?> rawList && !rawList.isEmpty() && rawList.getFirst() instanceof Document) {
+            Class<?> elemType = resolveGenericElementType(field);
+            List<?> subEntities =
+                rawList.stream()
+                    .filter(Document.class::isInstance)
+                    .map(d -> converter.read(elemType, (Document) d))
+                    .toList();
+            field.set(entity, subEntities);
+          }
+        } catch (Exception ex) {
+          log.trace("Could not populate joined DocumentReference field [{}]: {}", fieldName, ex.getMessage());
+        }
+      }
+    }
+  }
+
+  private Class<?> resolveGenericElementType(java.lang.reflect.Field field) {
+    if (java.util.Collection.class.isAssignableFrom(field.getType())) {
+      java.lang.reflect.Type genericType = field.getGenericType();
+      if (genericType instanceof java.lang.reflect.ParameterizedType pt) {
+        java.lang.reflect.Type[] args = pt.getActualTypeArguments();
+        if (args.length > 0 && args[0] instanceof Class<?> clazz) {
+          return clazz;
+        }
+      }
+    }
+    return Object.class;
   }
 }

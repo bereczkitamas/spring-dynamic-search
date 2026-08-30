@@ -117,7 +117,7 @@ class OrderAnnotationSearchIT extends AbstractMongoIntegrationTest {
     assertEquals(1, response.total());
     assertEquals("ORD-1002", response.data().getFirst().getOrderNumber());
     assertNotNull(response.data().getFirst().getAssets());
-    assertEquals("PowerEdge R750", response.data().getFirst().getAssets().getFirst().getName());
+    assertTrue(response.data().getFirst().getAssets().stream().anyMatch(a -> "PowerEdge R750".equals(a.getName())));
   }
 
   @Test

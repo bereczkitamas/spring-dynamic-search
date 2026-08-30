@@ -19,9 +19,9 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
   @BeforeEach
   void setUpRegistry() {
     JoinDescriptor userJoin =
-        new JoinDescriptor("users", "customerId", "_id", "customer", true);
+        new JoinDescriptor("users", "customer", "_id", "customer", true);
     JoinDescriptor assetsJoin =
-        new JoinDescriptor("assets", "assetIds", "_id", "assets", false);
+        new JoinDescriptor("assets", "assets", "_id", "assets", false);
 
     registry =
         SimpleSearchFieldRegistry.builder()
@@ -139,7 +139,7 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
   }
 
   @Test
-  @DisplayName("Joined User search on customer.address.city via $lookup on users")
+  @DisplayName("Joined User search on customer.address.city via DocumentReference $lookup on users")
   void testJoinedCustomerCitySearch() {
     SearchRequest request =
         SearchRequestBuilder.search()
@@ -173,7 +173,7 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
   }
 
   @Test
-  @DisplayName("Joined Array ELEM_MATCH search on assets via $lookup on assets collection")
+  @DisplayName("Joined Array ELEM_MATCH search on assets via DocumentReference $lookup on assets collection")
   void testJoinedArrayElemMatchSearch() {
     SearchRequest request =
         SearchRequestBuilder.search()
@@ -191,7 +191,7 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
     assertEquals(1, response.total());
     assertEquals("ORD-1004", response.data().getFirst().getOrderNumber());
     assertNotNull(response.data().getFirst().getAssets());
-    assertEquals("MacBook Pro 16", response.data().getFirst().getAssets().getFirst().getName());
+    assertTrue(response.data().getFirst().getAssets().stream().anyMatch(a -> "MacBook Pro 16".equals(a.getName())));
   }
 
   @Test

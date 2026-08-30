@@ -177,7 +177,7 @@ public class MongoTestDataSeeder {
     mongoTemplate.insertAll(
         List.of(asset1, asset2, asset3, asset4, asset5, asset6, asset7, asset8));
 
-    // 3. Seed Orders (into 'orders' collection) with foreign key references
+    // 3. Seed Orders (into 'orders' collection) with DocumentReferences
     Order order1 =
         Order.builder()
             .id("ord-1001")
@@ -185,8 +185,8 @@ public class MongoTestDataSeeder {
             .status("COMPLETED")
             .totalAmount(1250.0)
             .orderDate(Instant.parse("2026-01-10T10:00:00Z"))
-            .customerId(USER_ID_ALICE)
-            .assetIds(List.of(ASSET_ID_DELL_XPS, ASSET_ID_MX_MASTER))
+            .customer(alice)
+            .assets(List.of(asset1, asset2))
             .attributes(
                 Map.of(
                     "channel", "web",
@@ -202,8 +202,8 @@ public class MongoTestDataSeeder {
             .status("PROCESSING")
             .totalAmount(3400.0)
             .orderDate(Instant.parse("2026-01-15T14:30:00Z"))
-            .customerId(USER_ID_BOB)
-            .assetIds(List.of(ASSET_ID_POWEREDGE, ASSET_ID_APC_RACK))
+            .customer(bob)
+            .assets(List.of(asset3, asset4))
             .attributes(
                 Map.of(
                     "channel", "enterprise",
@@ -218,8 +218,8 @@ public class MongoTestDataSeeder {
             .status("NEW")
             .totalAmount(450.0)
             .orderDate(Instant.parse("2026-02-01T09:15:00Z"))
-            .customerId(USER_ID_CHARLIE)
-            .assetIds(List.of(ASSET_ID_LG_4K))
+            .customer(charlie)
+            .assets(List.of(asset5))
             .attributes(
                 Map.of(
                     "channel", "web",
@@ -234,8 +234,8 @@ public class MongoTestDataSeeder {
             .status("COMPLETED")
             .totalAmount(2100.0)
             .orderDate(Instant.parse("2026-02-15T16:45:00Z"))
-            .customerId(USER_ID_DIANA)
-            .assetIds(List.of(ASSET_ID_MACBOOK, ASSET_ID_ANKER_HUB))
+            .customer(diana)
+            .assets(List.of(asset6, asset7))
             .attributes(
                 Map.of(
                     "channel", "mobile",
@@ -250,8 +250,8 @@ public class MongoTestDataSeeder {
             .status("CANCELLED")
             .totalAmount(80.0)
             .orderDate(Instant.parse("2026-02-20T11:00:00Z"))
-            .customerId(USER_ID_ALICE)
-            .assetIds(List.of(ASSET_ID_KEYCHRON))
+            .customer(alice)
+            .assets(List.of(asset8))
             .attributes(
                 Map.of(
                     "channel", "in-store",

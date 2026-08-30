@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.DocumentReference;
 
 @Data
 @Builder
@@ -22,9 +23,12 @@ public class Order {
   private String status;
   private Double totalAmount;
   private Instant orderDate;
+
+  @DocumentReference(collection = "users")
   private User customer;
-  private String customerId;
-  private List<String> assetIds;
+
+  @DocumentReference(collection = "assets")
   private List<Asset> assets;
+
   private Map<String, Object> attributes;
 }
