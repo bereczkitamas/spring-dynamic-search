@@ -97,5 +97,15 @@ public class OrderDto {
   @SearchableField(documentField = "attributes.couponCode", description = "Applied promotional coupon code")
   private String couponCode;
 
+  @SearchableField(
+      documentField = "attributes.shippingMethod",
+      searchable = false,
+      projectable = true,
+      description = "Selected delivery shipping method")
+  private String shippingMethod;
+
+  @SearchableField(description = "Labels or tags attached to the order")
+  private List<String> tags;
+
   private Map<String, Object> attributes;
 }

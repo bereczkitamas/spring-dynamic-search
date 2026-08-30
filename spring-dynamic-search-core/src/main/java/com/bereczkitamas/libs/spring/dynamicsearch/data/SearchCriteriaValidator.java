@@ -120,9 +120,10 @@ public class SearchCriteriaValidator {
     if (operation == SearchOperation.IN
         || operation == SearchOperation.NOT_IN
         || operation == SearchOperation.CONTAINS_ALL) {
+      Class<?> elemType = (targetType != null && Collection.class.isAssignableFrom(targetType)) ? Object.class : targetType;
       List<?> rawList = toRawList(value);
       return rawList.stream()
-          .map(v -> convertSingleValue(v, targetType))
+          .map(v -> convertSingleValue(v, elemType))
           .collect(Collectors.toList());
     }
 

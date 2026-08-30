@@ -6,6 +6,8 @@ import com.bereczkitamas.libs.spring.dynamicsearch.data.*;
 import com.bereczkitamas.libs.spring.dynamicsearch.testdomain.Asset;
 import com.bereczkitamas.libs.spring.dynamicsearch.testdomain.Order;
 import java.time.Instant;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,13 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
 
     registry =
         SimpleSearchFieldRegistry.builder()
+            .register(
+                "id",
+                FieldMapping.alwaysIncluded(
+                    "_id",
+                    String.class,
+                    SearchOperation.EQUALS,
+                    SearchOperation.IN))
             .register(
                 "orderNumber",
                 FieldMapping.of(
@@ -118,6 +127,25 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
                     String.class,
                     SearchOperation.EQUALS,
                     SearchOperation.IN))
+            .register(
+                "projectionOnlyDate",
+                FieldMapping.projectionOnly(
+                    "orderDate",
+                    Instant.class))
+            .register(
+                "tags",
+                FieldMapping.arrayField(
+                    "tags",
+                    ArrayElementDescriptor.from(String.class),
+                    SearchOperation.SIZE,
+                    SearchOperation.CONTAINS_ALL))
+            .register(
+                "tagsByClass",
+                FieldMapping.arrayField(
+                    "tags",
+                    String.class,
+                    SearchOperation.SIZE,
+                    SearchOperation.CONTAINS_ALL))
             .build();
   }
 
@@ -136,6 +164,47 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
     assertEquals(2, response.total());
     assertEquals(2, response.data().size());
     assertTrue(response.data().stream().allMatch(o -> "COMPLETED".equals(o.getStatus())));
+  }
+
+  @Test
+  @DisplayName("Numeric range search on totalAmount using GREATER_THAN_OR_EQUAL and LESS_THAN")
+  void testNumericRangeSearch() {
+    SearchRequest request =
+        SearchRequestBuilder.search()
+            .where("totalAmount", SearchOperation.GREATER_THAN_OR_EQUAL, 1000.0)
+            .where("totalAmount", SearchOperation.LESS_THAN, 3000.0)
+            .build();
+
+    PagedSearchResponse<Order> response =
+        executor.executeSearch(request, registry, PageRequest.of(0, 10), Order.class);
+
+    assertEquals(2, response.total()); // ORD-1001 ($1250) and ORD-1004 ($2100)
+    assertTrue(response.data().stream().allMatch(o -> o.getTotalAmount() >= 1000.0 && o.getTotalAmount() < 3000.0));
+  }
+
+  @Test
+  @DisplayName("String pattern search using LIKE (case-insensitive contains) and STARTS_WITH")
+  void testStringPatternSearch() {
+    SearchRequest requestLike =
+        SearchRequestBuilder.search()
+            .where("orderNumber", SearchOperation.LIKE, "100")
+            .build();
+
+    PagedSearchResponse<Order> responseLike =
+        executor.executeSearch(requestLike, registry, PageRequest.of(0, 10), Order.class);
+
+    assertEquals(5, responseLike.total());
+
+    SearchRequest requestStartsWith =
+        SearchRequestBuilder.search()
+            .where("orderNumber", SearchOperation.STARTS_WITH, "ORD-1005")
+            .build();
+
+    PagedSearchResponse<Order> responseStartsWith =
+        executor.executeSearch(requestStartsWith, registry, PageRequest.of(0, 10), Order.class);
+
+    assertEquals(1, responseStartsWith.total());
+    assertEquals("ORD-1005", responseStartsWith.data().getFirst().getOrderNumber());
   }
 
   @Test
@@ -173,7 +242,7 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
   }
 
   @Test
-  @DisplayName("Joined Array ELEM_MATCH search on assets via DocumentReference $lookup on assets collection")
+  @DisplayName("Joined Array ELEM_MATCH search on assets collection items")
   void testJoinedArrayElemMatchSearch() {
     SearchRequest request =
         SearchRequestBuilder.search()
@@ -243,5 +312,97 @@ class OrderSimpleRegistrySearchIT extends AbstractMongoIntegrationTest {
     assertEquals(2, response.data().size());
     // Diana Prince > Charlie Brown > Bob Jones > Alice Smith
     assertEquals("Diana Prince", response.data().getFirst().getCustomer().getName());
+  }
+
+  @Test
+  @DisplayName("alwaysIncluded field (id) is retained in projection even when not explicitly requested")
+  void testAlwaysIncludedIdFieldInCustomProjection() {
+    SearchRequest request =
+        SearchRequestBuilder.search()
+            .where("status", SearchOperation.EQUALS, "PROCESSING")
+            .projection(ProjectionRequest.builder().include(Set.of("orderNumber", "totalAmount")).build())
+            .build();
+
+    PagedSearchResponse<Order> response =
+        executor.executeSearch(request, registry, PageRequest.of(0, 10), Order.class);
+
+    assertEquals(1, response.total());
+    Order order = response.data().getFirst();
+    assertEquals("ORD-1002", order.getOrderNumber());
+    assertEquals(3400.0, order.getTotalAmount());
+    assertEquals("ord-1002", order.getId()); // Retained because of alwaysIncluded=true
+  }
+
+  @Test
+  @DisplayName("projectionOnly field rejects search with InvalidSearchOperationException")
+  void testProjectionOnlyFieldRejectsSearch() {
+    SearchRequest request =
+        SearchRequestBuilder.search()
+            .where("projectionOnlyDate", SearchOperation.EQUALS, "2026-01-10T10:00:00Z")
+            .build();
+
+    assertThrows(
+        InvalidSearchOperationException.class,
+        () -> executor.executeSearch(request, registry, PageRequest.of(0, 10), Order.class));
+  }
+
+  @Test
+  @DisplayName("projectionOnly field is included in custom projection")
+  void testProjectionOnlyFieldIncludedInProjection() {
+    SearchRequest request =
+        SearchRequestBuilder.search()
+            .where("orderNumber", SearchOperation.EQUALS, "ORD-1001")
+            .projection(ProjectionRequest.builder().include(Set.of("orderNumber", "projectionOnlyDate")).build())
+            .build();
+
+    PagedSearchResponse<Order> response =
+        executor.executeSearch(request, registry, PageRequest.of(0, 10), Order.class);
+
+    assertEquals(1, response.total());
+    Order order = response.data().getFirst();
+    assertEquals("ORD-1001", order.getOrderNumber());
+    assertNotNull(order.getOrderDate());
+    assertEquals(Instant.parse("2026-01-10T10:00:00Z"), order.getOrderDate());
+  }
+
+  @Test
+  @DisplayName("Local arrayField with ArrayElementDescriptor supports SIZE and CONTAINS")
+  void testLocalArrayFieldWithDescriptor() {
+    // 1. SIZE = 3 (ORD-1002 has ["b2b", "bulk", "freight"])
+    SearchRequest sizeRequest =
+        SearchRequestBuilder.search()
+            .where("tags", SearchOperation.SIZE, 3)
+            .build();
+
+    PagedSearchResponse<Order> sizeResponse =
+        executor.executeSearch(sizeRequest, registry, PageRequest.of(0, 10), Order.class);
+
+    assertEquals(1, sizeResponse.total());
+    assertEquals("ORD-1002", sizeResponse.data().getFirst().getOrderNumber());
+
+    // 2. CONTAINS_ALL on array elements (ORD-1001 and ORD-1004 have "vip")
+    SearchRequest tagRequest =
+        SearchRequestBuilder.search()
+            .where("tags", SearchOperation.CONTAINS_ALL, List.of("vip"))
+            .build();
+
+    PagedSearchResponse<Order> tagResponse =
+        executor.executeSearch(tagRequest, registry, PageRequest.of(0, 10), Order.class);
+
+    assertEquals(2, tagResponse.total());
+  }
+
+  @Test
+  @DisplayName("Local arrayField with Class<?> factory supports SIZE and CONTAINS")
+  void testLocalArrayFieldWithClass() {
+    SearchRequest request =
+        SearchRequestBuilder.search()
+            .where("tagsByClass", SearchOperation.SIZE, 1)
+            .build();
+
+    PagedSearchResponse<Order> response =
+        executor.executeSearch(request, registry, PageRequest.of(0, 10), Order.class);
+
+    assertEquals(2, response.total()); // ORD-1003 ("regular") and ORD-1005 ("cancelled")
   }
 }

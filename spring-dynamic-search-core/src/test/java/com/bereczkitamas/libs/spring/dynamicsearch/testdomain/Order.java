@@ -30,5 +30,7 @@ public class Order {
   @DocumentReference(collection = "assets")
   private List<Asset> assets;
 
+  private List<String> tags;
+
   private Map<String, Object> attributes;
 }

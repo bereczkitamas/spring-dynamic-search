@@ -187,6 +187,7 @@ public class MongoTestDataSeeder {
             .orderDate(Instant.parse("2026-01-10T10:00:00Z"))
             .customer(alice)
             .assets(List.of(asset1, asset2))
+            .tags(List.of("vip", "urgent"))
             .attributes(
                 Map.of(
                     "channel", "web",
@@ -204,6 +205,7 @@ public class MongoTestDataSeeder {
             .orderDate(Instant.parse("2026-01-15T14:30:00Z"))
             .customer(bob)
             .assets(List.of(asset3, asset4))
+            .tags(List.of("b2b", "bulk", "freight"))
             .attributes(
                 Map.of(
                     "channel", "enterprise",
@@ -220,6 +222,7 @@ public class MongoTestDataSeeder {
             .orderDate(Instant.parse("2026-02-01T09:15:00Z"))
             .customer(charlie)
             .assets(List.of(asset5))
+            .tags(List.of("regular"))
             .attributes(
                 Map.of(
                     "channel", "web",
@@ -236,6 +239,7 @@ public class MongoTestDataSeeder {
             .orderDate(Instant.parse("2026-02-15T16:45:00Z"))
             .customer(diana)
             .assets(List.of(asset6, asset7))
+            .tags(List.of("vip", "apple"))
             .attributes(
                 Map.of(
                     "channel", "mobile",
@@ -252,6 +256,7 @@ public class MongoTestDataSeeder {
             .orderDate(Instant.parse("2026-02-20T11:00:00Z"))
             .customer(alice)
             .assets(List.of(asset8))
+            .tags(List.of("cancelled"))
             .attributes(
                 Map.of(
                     "channel", "in-store",
